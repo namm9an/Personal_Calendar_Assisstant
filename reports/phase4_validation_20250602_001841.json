@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-06-02T00:18:41.772812",
+  "environment": {
+    "base_url": "https://calendar-assistant.example.com",
+    "namespace": "production",
+    "grafana_url": "https://grafana.example.com",
+    "prometheus_url": "https://prometheus.example.com"
+  },
+  "test_results": {
+    "kubernetes_deployment": {
+      "status": "pending",
+      "details": "Test not run"
+    },
+    "monitoring_setup": {
+      "status": "pending",
+      "details": "Test not run"
+    },
+    "security_measures": {
+      "status": "pending",
+      "details": "Test not run"
+    },
+    "load_testing": {
+      "status": "pending",
+      "details": "Test not run"
+    },
+    "backup_restore": {
+      "status": "pending",
+      "details": "Test not run"
+    },
+    "disaster_recovery": {
+      "status": "pending",
+      "details": "Test not run"
+    }
+  },
+  "summary": {
+    "total_tests": 6,
+    "passed": 0,
+    "failed": 0,
+    "pending": 6
+  }
+}

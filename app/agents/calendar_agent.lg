@@ -1,0 +1,135 @@
+name: calendar_agent
+description: "An agent that helps users manage their calendar through natural language interactions."
+version: "1.0.0"
+
+config:
+  temperature: 0.1
+  model: "gemini-pro"
+  system_message: |
+    You are a helpful calendar assistant. Your job is to understand the user's 
+    request and use calendar tools to help them schedule, reschedule, or cancel events,
+    find free time slots, and view their calendar. Be precise, courteous, and efficient.
+
+tools:
+  # List Events Tool
+  - name: list_events
+    description: "Lists calendar events within a specified date range."
+    function: "app.agent.calendar_tool_wrappers:list_events_tool"
+    inputs:
+      - schema: app.schemas.tool_schemas.ListEventsInput
+    outputs:
+      - schema: app.schemas.tool_schemas.ListEventsOutput
+
+  # Find Free Slots Tool
+  - name: find_free_slots
+    description: "Finds available time slots for scheduling meetings based on specified constraints."
+    function: "app.agent.calendar_tool_wrappers:find_free_slots_tool"
+    inputs:
+      - schema: app.schemas.tool_schemas.FreeSlotsInput
+    outputs:
+      - schema: app.schemas.tool_schemas.FreeSlotsOutput
+
+  # Create Event Tool
+  - name: create_event
+    description: "Creates a new calendar event with specified details."
+    function: "app.agent.calendar_tool_wrappers:create_event_tool"
+    inputs:
+      - schema: app.schemas.tool_schemas.CreateEventInput
+    outputs:
+      - schema: app.schemas.tool_schemas.CreateEventOutput
+
+  # Reschedule Event Tool
+  - name: reschedule_event
+    description: "Reschedules an existing event to a new start time."
+    function: "app.agent.calendar_tool_wrappers:reschedule_event_tool"
+    inputs:
+      - schema: app.schemas.tool_schemas.RescheduleEventInput
+    outputs:
+      - schema: app.schemas.tool_schemas.RescheduleEventOutput
+
+  # Cancel Event Tool
+  - name: cancel_event
+    description: "Cancels (deletes) an existing calendar event by ID."
+    function: "app.agent.calendar_tool_wrappers:cancel_event_tool"
+    inputs:
+      - schema: app.schemas.tool_schemas.CancelEventInput
+    outputs:
+      - schema: app.schemas.tool_schemas.CancelEventOutput
+
+nodes:
+  - id: intent_classifier
+    type: llm
+    config:
+      system_message: |
+        You are an intent classifier for a calendar assistant. 
+        Your job is to analyze the user's request and classify it into one of the following intents:
+        - VIEW_CALENDAR: User wants to see events in their calendar
+        - FIND_TIME: User wants to find available times for a meeting
+        - CREATE_EVENT: User wants to create a new calendar event
+        - RESCHEDULE_EVENT: User wants to change the time of an existing event
+        - CANCEL_EVENT: User wants to cancel an existing event
+        - GENERAL_QUESTION: User has a general question about calendars or scheduling
+        
+        Output ONLY the intent name, nothing else.
+
+  - id: view_calendar_handler
+    type: tool
+    config:
+      tool_name: list_events
+
+  - id: find_time_handler
+    type: tool
+    config:
+      tool_name: find_free_slots
+
+  - id: create_event_handler
+    type: tool
+    config:
+      tool_name: create_event
+
+  - id: reschedule_event_handler
+    type: tool
+    config:
+      tool_name: reschedule_event
+
+  - id: cancel_event_handler
+    type: tool
+    config:
+      tool_name: cancel_event
+
+  - id: response_generator
+    type: llm
+    config:
+      system_message: |
+        You are a helpful calendar assistant. Based on the results of the calendar operation,
+        generate a friendly and informative response to the user. Be concise but complete.
+
+edges:
+  - from: [entry]
+    to: intent_classifier
+  
+  - from: intent_classifier
+    to: view_calendar_handler
+    when: $output == "VIEW_CALENDAR"
+
+  - from: intent_classifier
+    to: find_time_handler
+    when: $output == "FIND_TIME"
+
+  - from: intent_classifier
+    to: create_event_handler
+    when: $output == "CREATE_EVENT"
+
+  - from: intent_classifier
+    to: reschedule_event_handler
+    when: $output == "RESCHEDULE_EVENT"
+
+  - from: intent_classifier
+    to: cancel_event_handler
+    when: $output == "CANCEL_EVENT"
+
+  - from: [view_calendar_handler, find_time_handler, create_event_handler, reschedule_event_handler, cancel_event_handler]
+    to: response_generator
+
+  - from: response_generator
+    to: [exit]
