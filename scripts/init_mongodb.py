@@ -8,9 +8,14 @@ import logging
 from datetime import datetime, timedelta
 from src.db.connection import MongoDB
 from src.models.mongodb_models import User, Event, Session, AgentLog
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Use environment variables for tokens
+SAMPLE_SESSION_TOKEN = os.getenv("SAMPLE_SESSION_TOKEN", "sample_session_token")
+SAMPLE_REFRESH_TOKEN = os.getenv("SAMPLE_REFRESH_TOKEN", "sample_session_refresh")
 
 async def create_sample_data():
     """Create sample data in MongoDB."""
@@ -51,8 +56,8 @@ async def create_sample_data():
         session = Session(
             user_id=user_id,
             provider="google",
-            access_token="sample_session_token",
-            refresh_token="sample_session_refresh",
+            access_token=SAMPLE_SESSION_TOKEN,
+            refresh_token=SAMPLE_REFRESH_TOKEN,
             expires_at=datetime.utcnow() + timedelta(hours=1)
         )
         await db.sessions.insert_one(session.dict())
