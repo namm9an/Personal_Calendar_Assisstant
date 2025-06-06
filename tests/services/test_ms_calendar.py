@@ -16,6 +16,7 @@ from app.schemas.ms_calendar import (
     MSCalendarUpdate,
     MSFreeSlotRequest,
     MSTimeSlot,
+    MSAttendee,
 )
 from app.services.ms_calendar import MicrosoftCalendarClient
 from app.services.encryption import TokenEncryption
@@ -33,10 +34,9 @@ def mock_user():
     """Mock user with Microsoft credentials."""
     user = MagicMock(spec=User)
     user.id = "test-user-id"
-    user.email = "test@example.com"
-    user.microsoft_access_token = "encrypted-access-token"
-    user.microsoft_refresh_token = "encrypted-refresh-token"
-    user.microsoft_token_expiry = datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+    user.microsoft_access_token = TokenEncryption.encrypt("test-access-token")
+    user.microsoft_refresh_token = TokenEncryption.encrypt("test-refresh-token")
+    user.microsoft_token_expiry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
     return user
 
 
@@ -234,8 +234,8 @@ class TestMicrosoftCalendarClient:
             summary="Test Event",
             description="Test Description",
             location="Test Location",
-            start=datetime.datetime(2023, 1, 1, 10, 0),
-            end=datetime.datetime(2023, 1, 1, 11, 0),
+            start=datetime.datetime(2023, 1, 1, 10, 0, tzinfo=datetime.timezone.utc),
+            end=datetime.datetime(2023, 1, 1, 11, 0, tzinfo=datetime.timezone.utc),
             is_all_day=False,
             attendees=[{"email": "test@example.com", "name": "Test User"}]
         )
@@ -247,8 +247,8 @@ class TestMicrosoftCalendarClient:
         assert result["subject"] == "Test Event"
         assert result["body"]["content"] == "Test Description"
         assert result["location"]["displayName"] == "Test Location"
-        assert result["start"]["dateTime"] == "2023-01-01T10:00:00"
-        assert result["end"]["dateTime"] == "2023-01-01T11:00:00"
+        assert result["start"]["dateTime"] == "2023-01-01T10:00:00+00:00"
+        assert result["end"]["dateTime"] == "2023-01-01T11:00:00+00:00"
         assert result["isAllDay"] is False
         assert len(result["attendees"]) == 1
         assert result["attendees"][0]["emailAddress"]["address"] == "test@example.com"
@@ -274,6 +274,23 @@ class TestMicrosoftCalendarClient:
         assert "start" not in result  # Times not updated
         assert "end" not in result
         assert "isAllDay" not in result
+
+    def test_validate_event_dates(self, calendar_client):
+        """Test event date validation."""
+        # Test valid dates
+        start = datetime.datetime(2023, 1, 1, 10, 0, tzinfo=datetime.timezone.utc)
+        end = datetime.datetime(2023, 1, 1, 11, 0, tzinfo=datetime.timezone.utc)
+        calendar_client._validate_event_dates(start, end)  # Should not raise
+
+        # Test invalid dates (end before start)
+        with pytest.raises(ValueError) as exc_info:
+            calendar_client._validate_event_dates(end, start)
+        assert "End time must be after start time" in str(exc_info.value)
+
+        # Test invalid dates (same time)
+        with pytest.raises(ValueError) as exc_info:
+            calendar_client._validate_event_dates(start, start)
+        assert "End time must be after start time" in str(exc_info.value)
 
     @patch("app.services.ms_calendar.requests.get")
     def test_list_calendars_success(self, mock_requests_get, calendar_client, mock_db, mock_user):
@@ -350,8 +367,8 @@ class TestMicrosoftCalendarClient:
         }
         mock_requests_get.return_value = mock_response
 
-        time_min = datetime.datetime(2023, 1, 1)
-        time_max = datetime.datetime(2023, 1, 2)
+        time_min = datetime.datetime(2023, 1, 1, tzinfo=datetime.timezone.utc)
+        time_max = datetime.datetime(2023, 1, 2, tzinfo=datetime.timezone.utc)
 
         # Test
         result = calendar_client.list_events(
@@ -382,8 +399,8 @@ class TestMicrosoftCalendarClient:
             summary="Test Event",
             description="Test Description",
             location="Test Location",
-            start=datetime.datetime(2023, 1, 1, 10, 0),
-            end=datetime.datetime(2023, 1, 1, 11, 0),
+            start=datetime.datetime(2023, 1, 1, 10, 0, tzinfo=datetime.timezone.utc),
+            end=datetime.datetime(2023, 1, 1, 11, 0, tzinfo=datetime.timezone.utc),
             is_all_day=False,
             attendees=[{"email": "test@example.com", "name": "Test User"}]
         )
@@ -503,20 +520,51 @@ class TestMicrosoftCalendarClient:
         }
         mock_requests_post.return_value = mock_response
 
-        request = MSFreeSlotRequest(
-            duration_minutes=60,
-            start_date=datetime.datetime(2023, 1, 1, 10, 0),
-            end_date=datetime.datetime(2023, 1, 1, 14, 0),
-            attendees=["attendee@example.com"]
-        )
-
         # Test
+        request = MSFreeSlotRequest(
+            duration_minutes=30,
+            start_date=datetime.datetime(2023, 1, 1, 9, 0, tzinfo=datetime.timezone.utc),
+            end_date=datetime.datetime(2023, 1, 1, 17, 0, tzinfo=datetime.timezone.utc),
+            attendees=["test@example.com"]
+        )
         result = calendar_client.find_free_slots(
             user_id="test-user-id",
-            free_slot_request=request
+            request=request,
+            calendar_id="primary"
         )
 
         # Verify
-        assert isinstance(result, MSFreeSlotResponse)
-        assert len(result.slots) > 0
+        assert isinstance(result, list)
+        assert all(isinstance(slot, MSTimeSlot) for slot in result)
+        assert len(result) > 0
         mock_requests_post.assert_called_once()
+
+    def test_validate_free_slot_request(self, calendar_client):
+        """Test free slot request validation."""
+        # Test valid request
+        request = MSFreeSlotRequest(
+            duration_minutes=30,
+            start_date=datetime.datetime(2023, 1, 1, 9, 0, tzinfo=datetime.timezone.utc),
+            end_date=datetime.datetime(2023, 1, 1, 17, 0, tzinfo=datetime.timezone.utc)
+        )
+        calendar_client._validate_free_slot_request(request)  # Should not raise
+
+        # Test invalid duration
+        with pytest.raises(ValueError) as exc_info:
+            request = MSFreeSlotRequest(
+                duration_minutes=4,  # Less than minimum
+                start_date=datetime.datetime(2023, 1, 1, 9, 0, tzinfo=datetime.timezone.utc),
+                end_date=datetime.datetime(2023, 1, 1, 17, 0, tzinfo=datetime.timezone.utc)
+            )
+            calendar_client._validate_free_slot_request(request)
+        assert "Duration must be between 5 and 480 minutes" in str(exc_info.value)
+
+        # Test invalid date range
+        with pytest.raises(ValueError) as exc_info:
+            request = MSFreeSlotRequest(
+                duration_minutes=30,
+                start_date=datetime.datetime(2023, 1, 1, 17, 0, tzinfo=datetime.timezone.utc),
+                end_date=datetime.datetime(2023, 1, 1, 9, 0, tzinfo=datetime.timezone.utc)
+            )
+            calendar_client._validate_free_slot_request(request)
+        assert "End date must be after start date" in str(exc_info.value)

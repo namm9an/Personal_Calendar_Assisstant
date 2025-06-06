@@ -1,109 +1,313 @@
+"""Tests for MongoDB integration."""
 import pytest
 from datetime import datetime, timedelta
-from src.repositories.mongodb_repository import MongoDBRepository
-from src.models.mongodb_models import User, Event, Session, AgentLog
+from bson import ObjectId
+from app.core.exceptions import DatabaseError, ValidationError
+from app.models.mongodb_models import User, Event, Session, AgentLog
 
-@pytest.mark.asyncio
-async def test_create_user(mongodb_repository, test_user):
-    """Test user creation."""
-    # User already created by fixture
-    assert test_user.id is not None
-    assert test_user.email == "test@example.com"
+class TestMongoDBModels:
+    """Tests for MongoDB models."""
 
-@pytest.mark.asyncio
-async def test_get_user_by_email(mongodb_repository, test_user):
-    """Test retrieving user by email."""
-    repo = MongoDBRepository()
-    user = await repo.get_user_by_email("test@example.com")
-    assert user is not None
-    assert user.email == test_user.email
-    assert user.id == test_user.id
+    @pytest.fixture
+    def test_user_data(self):
+        """Create test user data."""
+        return {
+            "email": "test@example.com",
+            "name": "Test User",
+            "timezone": "UTC",
+            "working_hours": {
+                "start": "09:00",
+                "end": "17:00",
+                "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+            },
+            "preferences": {
+                "notification_enabled": True,
+                "notification_time": "15:00",
+                "default_calendar": "google"
+            }
+        }
 
-@pytest.mark.asyncio
-async def test_update_user_tokens(mongodb_repository, test_user):
-    """Test updating user tokens."""
-    repo = MongoDBRepository()
-    tokens = {
-        "access_token": "new_access_token",
-        "refresh_token": "new_refresh_token",
-        "expires_at": datetime.utcnow() + timedelta(hours=1)
-    }
-    success = await repo.update_user_tokens(test_user.id, "google", tokens)
-    assert success is True
+    @pytest.fixture
+    def test_event_data(self):
+        """Create test event data."""
+        return {
+            "summary": "Test Event",
+            "description": "This is a test event",
+            "start_datetime": datetime.utcnow(),
+            "end_datetime": datetime.utcnow() + timedelta(hours=1),
+            "location": "Test Location",
+            "attendees": ["test@example.com"],
+            "status": "confirmed"
+        }
+
+    @pytest.fixture
+    def test_session_data(self):
+        """Create test session data."""
+        return {
+            "provider": "google",
+            "access_token": "test-access-token",
+            "refresh_token": "test-refresh-token",
+            "token_type": "Bearer",
+            "expires_at": datetime.utcnow() + timedelta(hours=1),
+            "scope": "https://www.googleapis.com/auth/calendar"
+        }
+
+    @pytest.fixture
+    def test_agent_log_data(self):
+        """Create test agent log data."""
+        return {
+            "intent": "create_event",
+            "entities": {
+                "summary": "Test Event",
+                "start_time": "2024-03-20T10:00:00Z",
+                "end_time": "2024-03-20T11:00:00Z"
+            },
+            "response": "Event created successfully",
+            "processing_time": 0.5,
+            "success": True
+        }
+
+    async def test_user_model(self, test_db, test_user_data):
+        """Test User model operations."""
+        # Create user
+        user = User(**test_user_data)
+        await test_db.users.insert_one(user.dict())
+        
+        # Retrieve user
+        retrieved_user = await test_db.users.find_one({"email": test_user_data["email"]})
+        assert retrieved_user is not None
+        assert retrieved_user["email"] == test_user_data["email"]
+        assert retrieved_user["name"] == test_user_data["name"]
+        assert retrieved_user["timezone"] == test_user_data["timezone"]
+        
+        # Update user
+        new_name = "Updated Test User"
+        await test_db.users.update_one(
+            {"email": test_user_data["email"]},
+            {"$set": {"name": new_name}}
+        )
 
     # Verify update
-    user = await repo.get_user_by_email(test_user.email)
-    assert user.google_token == tokens
+        updated_user = await test_db.users.find_one({"email": test_user_data["email"]})
+        assert updated_user["name"] == new_name
+        
+        # Delete user
+        await test_db.users.delete_one({"email": test_user_data["email"]})
+        
+        # Verify deletion
+        deleted_user = await test_db.users.find_one({"email": test_user_data["email"]})
+        assert deleted_user is None
 
-@pytest.mark.asyncio
-async def test_create_event(mongodb_repository, test_user):
-    """Test event creation."""
-    repo = MongoDBRepository()
-    event = Event(
-        user_id=test_user.id,
-        provider="google",
-        provider_event_id="test_event_2",
-        summary="Test Event 2",
-        start=datetime.utcnow(),
-        end=datetime.utcnow() + timedelta(hours=1)
-    )
-    created_event = await repo.create_event(event)
-    assert created_event.id is not None
-    assert created_event.summary == "Test Event 2"
+    async def test_event_model(self, test_db, test_event_data):
+        """Test Event model operations."""
+        # Create event
+        event = Event(**test_event_data)
+        await test_db.events.insert_one(event.dict())
+        
+        # Retrieve event
+        retrieved_event = await test_db.events.find_one({"summary": test_event_data["summary"]})
+        assert retrieved_event is not None
+        assert retrieved_event["summary"] == test_event_data["summary"]
+        assert retrieved_event["description"] == test_event_data["description"]
+        assert retrieved_event["status"] == test_event_data["status"]
+        
+        # Update event
+        new_summary = "Updated Test Event"
+        await test_db.events.update_one(
+            {"summary": test_event_data["summary"]},
+            {"$set": {"summary": new_summary}}
+        )
+        
+        # Verify update
+        updated_event = await test_db.events.find_one({"summary": new_summary})
+        assert updated_event["summary"] == new_summary
+        
+        # Delete event
+        await test_db.events.delete_one({"summary": new_summary})
+        
+        # Verify deletion
+        deleted_event = await test_db.events.find_one({"summary": new_summary})
+        assert deleted_event is None
 
-@pytest.mark.asyncio
-async def test_get_user_events(mongodb_repository, test_user, test_event):
-    """Test retrieving user events."""
-    repo = MongoDBRepository()
-    start = datetime.utcnow() - timedelta(days=1)
-    end = datetime.utcnow() + timedelta(days=1)
-    events = await repo.get_user_events(test_user.id, start, end)
-    assert len(events) >= 1
-    assert any(e.id == test_event.id for e in events)
+    async def test_session_model(self, test_db, test_session_data):
+        """Test Session model operations."""
+        # Create session
+        session = Session(**test_session_data)
+        await test_db.sessions.insert_one(session.dict())
+        
+        # Retrieve session
+        retrieved_session = await test_db.sessions.find_one({"provider": test_session_data["provider"]})
+        assert retrieved_session is not None
+        assert retrieved_session["provider"] == test_session_data["provider"]
+        assert retrieved_session["token_type"] == test_session_data["token_type"]
+        assert retrieved_session["scope"] == test_session_data["scope"]
+        
+        # Update session
+        new_token = "new-access-token"
+        await test_db.sessions.update_one(
+            {"provider": test_session_data["provider"]},
+            {"$set": {"access_token": new_token}}
+        )
+        
+        # Verify update
+        updated_session = await test_db.sessions.find_one({"provider": test_session_data["provider"]})
+        assert updated_session["access_token"] == new_token
+        
+        # Delete session
+        await test_db.sessions.delete_one({"provider": test_session_data["provider"]})
+        
+        # Verify deletion
+        deleted_session = await test_db.sessions.find_one({"provider": test_session_data["provider"]})
+        assert deleted_session is None
 
-@pytest.mark.asyncio
-async def test_create_session(mongodb_repository, test_user):
-    """Test session creation."""
-    repo = MongoDBRepository()
-    session = Session(
-        user_id=test_user.id,
-        provider="google",
-        access_token="test_access_token",
-        refresh_token="test_refresh_token",
-        expires_at=datetime.utcnow() + timedelta(hours=1)
-    )
-    created_session = await repo.create_session(session)
-    assert created_session.id is not None
-    assert created_session.access_token == "test_access_token"
+    async def test_agent_log_model(self, test_db, test_agent_log_data):
+        """Test AgentLog model operations."""
+        # Create agent log
+        agent_log = AgentLog(**test_agent_log_data)
+        await test_db.agent_logs.insert_one(agent_log.dict())
+        
+        # Retrieve agent log
+        retrieved_log = await test_db.agent_logs.find_one({"intent": test_agent_log_data["intent"]})
+        assert retrieved_log is not None
+        assert retrieved_log["intent"] == test_agent_log_data["intent"]
+        assert retrieved_log["success"] == test_agent_log_data["success"]
+        assert retrieved_log["processing_time"] == test_agent_log_data["processing_time"]
+        
+        # Update agent log
+        new_response = "Updated response"
+        await test_db.agent_logs.update_one(
+            {"intent": test_agent_log_data["intent"]},
+            {"$set": {"response": new_response}}
+        )
+        
+        # Verify update
+        updated_log = await test_db.agent_logs.find_one({"intent": test_agent_log_data["intent"]})
+        assert updated_log["response"] == new_response
+        
+        # Delete agent log
+        await test_db.agent_logs.delete_one({"intent": test_agent_log_data["intent"]})
+        
+        # Verify deletion
+        deleted_log = await test_db.agent_logs.find_one({"intent": test_agent_log_data["intent"]})
+        assert deleted_log is None
 
-@pytest.mark.asyncio
-async def test_get_active_session(mongodb_repository, test_user, test_session):
-    """Test retrieving active session."""
-    repo = MongoDBRepository()
-    session = await repo.get_active_session(test_user.id, "google")
-    assert session is not None
-    assert session.id == test_session.id
-    assert session.access_token == test_session.access_token
+    async def test_user_validation(self, test_db):
+        """Test User model validation."""
+        # Test invalid email
+        invalid_user_data = {
+            "email": "invalid-email",
+            "name": "Test User",
+            "timezone": "UTC"
+        }
+        
+        with pytest.raises(ValidationError) as excinfo:
+            User(**invalid_user_data)
+        
+        assert "Invalid email format" in str(excinfo.value)
+        
+        # Test missing required field
+        incomplete_user_data = {
+            "email": "test@example.com",
+            "name": "Test User"
+        }
+        
+        with pytest.raises(ValidationError) as excinfo:
+            User(**incomplete_user_data)
+        
+        assert "timezone is required" in str(excinfo.value)
 
-@pytest.mark.asyncio
-async def test_create_agent_log(mongodb_repository, test_user):
-    """Test agent log creation."""
-    repo = MongoDBRepository()
-    log = AgentLog(
-        user_id=test_user.id,
-        intent="test_intent",
-        input_text="test input",
-        steps=[{"step": 1, "action": "test_action"}],
-        final_output="test output"
-    )
-    created_log = await repo.create_agent_log(log)
-    assert created_log.id is not None
-    assert created_log.intent == "test_intent"
+    async def test_event_validation(self, test_db):
+        """Test Event model validation."""
+        # Test invalid datetime
+        invalid_event_data = {
+            "summary": "Test Event",
+            "description": "This is a test event",
+            "start_datetime": "invalid-datetime",
+            "end_datetime": datetime.utcnow() + timedelta(hours=1),
+            "status": "confirmed"
+        }
+        
+        with pytest.raises(ValidationError) as excinfo:
+            Event(**invalid_event_data)
+        
+        assert "Invalid datetime format" in str(excinfo.value)
+        
+        # Test end time before start time
+        invalid_times_event_data = {
+            "summary": "Test Event",
+            "description": "This is a test event",
+            "start_datetime": datetime.utcnow() + timedelta(hours=1),
+            "end_datetime": datetime.utcnow(),
+            "status": "confirmed"
+        }
+        
+        with pytest.raises(ValidationError) as excinfo:
+            Event(**invalid_times_event_data)
+        
+        assert "End time must be after start time" in str(excinfo.value)
 
-@pytest.mark.asyncio
-async def test_get_user_agent_logs(mongodb_repository, test_user, test_agent_log):
-    """Test retrieving user agent logs."""
-    repo = MongoDBRepository()
-    logs = await repo.get_user_agent_logs(test_user.id)
-    assert len(logs) >= 1
-    assert any(log.id == test_agent_log.id for log in logs) 
+    async def test_session_validation(self, test_db):
+        """Test Session model validation."""
+        # Test invalid provider
+        invalid_session_data = {
+            "provider": "invalid-provider",
+            "access_token": "test-access-token",
+            "refresh_token": "test-refresh-token",
+            "token_type": "Bearer",
+            "expires_at": datetime.utcnow() + timedelta(hours=1),
+            "scope": "https://www.googleapis.com/auth/calendar"
+        }
+        
+        with pytest.raises(ValidationError) as excinfo:
+            Session(**invalid_session_data)
+        
+        assert "Invalid provider" in str(excinfo.value)
+        
+        # Test expired token
+        expired_session_data = {
+            "provider": "google",
+            "access_token": "test-access-token",
+            "refresh_token": "test-refresh-token",
+            "token_type": "Bearer",
+            "expires_at": datetime.utcnow() - timedelta(hours=1),
+            "scope": "https://www.googleapis.com/auth/calendar"
+        }
+        
+        with pytest.raises(ValidationError) as excinfo:
+            Session(**expired_session_data)
+        
+        assert "Token has expired" in str(excinfo.value)
+
+    async def test_agent_log_validation(self, test_db):
+        """Test AgentLog model validation."""
+        # Test invalid processing time
+        invalid_log_data = {
+            "intent": "create_event",
+            "entities": {
+                "summary": "Test Event",
+                "start_time": "2024-03-20T10:00:00Z",
+                "end_time": "2024-03-20T11:00:00Z"
+            },
+            "response": "Event created successfully",
+            "processing_time": -0.5,
+            "success": True
+        }
+        
+        with pytest.raises(ValidationError) as excinfo:
+            AgentLog(**invalid_log_data)
+        
+        assert "Processing time must be positive" in str(excinfo.value)
+        
+        # Test missing required field
+        incomplete_log_data = {
+            "intent": "create_event",
+            "entities": {
+                "summary": "Test Event"
+            },
+            "success": True
+        }
+        
+        with pytest.raises(ValidationError) as excinfo:
+            AgentLog(**incomplete_log_data)
+        
+        assert "response is required" in str(excinfo.value) 

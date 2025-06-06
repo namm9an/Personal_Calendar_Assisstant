@@ -14,7 +14,7 @@ from app.models.user import User
 from app.schemas.tool_schemas import (
     EventSchema, AttendeeSchema, FreeSlotsInput, FreeSlotsOutput, TimeSlotSchema,
     CreateEventInput, CreateEventOutput, RescheduleEventInput, RescheduleEventOutput,
-    CancelEventInput, CancelEventOutput
+    CancelEventInput, CancelEventOutput, DeleteEventInput
 )
 from app.services.google_calendar import GoogleCalendarService
 from app.services.ms_calendar import MicrosoftCalendarService
@@ -149,6 +149,8 @@ def list_events_tool(
         logger.error(error_msg)
         raise ToolExecutionError(error_msg, original_exception=e)
 
+# Instantiate Tool object for list_events_tool
+list_events_tool_tool = Tool(name='list_events', func=list_events_tool, description='A function to list calendar events for a user within a specified time range.')
 
 def find_free_slots_tool(
     calendar_tools: Optional["CalendarTools"] = None,
@@ -232,8 +234,9 @@ def find_free_slots_tool(
         logger.error(error_msg)
         raise ToolExecutionError(error_msg, original_exception=e)
 
+# Instantiate Tool object for find_free_slots_tool
+find_free_slots_tool_tool = Tool(name='find_free_slots', func=find_free_slots_tool, description='A function to find available time slots that satisfy given constraints.')
 
-@Tool # Changed from @tool_wrapper
 def create_event_tool(
     user_id: Optional[str] = None, 
     input_data: Union[CreateEventInput, dict] = None,
@@ -378,6 +381,8 @@ def create_event_tool(
         if db:
             db.close()
 
+# Instantiate Tool object for create_event_tool
+create_event_tool_tool = Tool(name='create_event', func=create_event_tool, description='A function to create a new calendar event.')
 
 def reschedule_event_tool(
     user_id: Optional[str] = None,
@@ -524,6 +529,8 @@ def reschedule_event_tool(
         if db_session_to_close:
             db_session_to_close.close()
 
+# Instantiate Tool object for reschedule_event_tool
+reschedule_event_tool_tool = Tool(name='reschedule_event', func=reschedule_event_tool, description='A function to reschedule an existing calendar event.')
 
 def cancel_event_tool(
     user_id: Optional[str] = None,
@@ -614,6 +621,67 @@ def cancel_event_tool(
         if db_session_to_close:
             db_session_to_close.close()
 
+# Instantiate Tool object for cancel_event_tool
+cancel_event_tool_tool = Tool(name='cancel_event', func=cancel_event_tool, description='A function to cancel an existing calendar event.')
+
+def delete_event_tool(
+    user_id: Optional[str] = None,
+    input_data: Union[DeleteEventInput, dict] = None,
+    calendar_tools_instance: Optional[CalendarTools] = None,
+    db_session_factory: Optional[Callable[[], Session]] = None,
+    **kwargs
+) -> str:
+    """
+    Delete a calendar event.
+    
+    Args:
+        user_id: ID of the user who owns the event
+        input_data: Parameters for deleting the event
+        calendar_tools_instance: Initialized CalendarTools instance
+        db_session_factory: Factory function to create database sessions
+        
+    Returns:
+        JSON string with the deletion result
+    """
+    try:
+        # Handle both calling patterns
+        if db_session_factory and not calendar_tools_instance:
+            db = db_session_factory()
+            if not isinstance(input_data, dict):
+                input_data = input_data.dict()
+            user = ensure_test_user_exists(db, input_data.get('user_id'))
+            calendar_tools_instance = CalendarTools(user, db)
+        
+        # Ensure input_data is a dictionary
+        if not isinstance(input_data, dict):
+            input_data = input_data.dict()
+            
+        # Validate inputs
+        if not calendar_tools_instance:
+            raise ValueError("CalendarTools instance is required")
+            
+        if not input_data:
+            raise ValueError("Input data is required")
+            
+        # Log the operation
+        logger.info(f"Deleting event for user {calendar_tools_instance.user.id} with input: {input_data}")
+        
+        # Delete the event
+        result = calendar_tools_instance.delete_event(input_data)
+        
+        return result
+        
+    except Exception as e:
+        error_msg = f"Failed to delete event: {str(e)}"
+        logger.error(error_msg)
+        raise ToolExecutionError(error_msg, original_exception=e)
+
+# Instantiate Tool object for delete_event_tool
+delete_event_tool_tool = Tool(
+    name='delete_event',
+    func=delete_event_tool,
+    description='A function to delete a calendar event.'
+)
 
 def ensure_test_user_exists(db_session, user_id_str: str):
     user_id_obj = uuid.UUID(user_id_str) # Convert string to UUID object for DB operations

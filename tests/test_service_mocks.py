@@ -1,6 +1,7 @@
 import pytest
 from datetime import datetime, timedelta
 from app.schemas.tool_schemas import EventSchema
+from unittest.mock import MagicMock, AsyncMock
 
 # Test Mock Google Service
 def test_mock_google_service_list_events(mock_google_service):
@@ -68,4 +69,34 @@ def test_mock_microsoft_service_update_event(mock_microsoft_service):
 
 def test_mock_microsoft_service_delete_event(mock_microsoft_service):
     result = mock_microsoft_service.delete_event("dummy_token", "user_id", "existing-event-id")
-    assert result is True 
+    assert result is True
+
+class MockGoogleService:
+    def __init__(self):
+        self.list_events = AsyncMock(return_value=[])
+        self.find_free_slots = AsyncMock(return_value=[])
+        self.create_event = AsyncMock(return_value={"id": "mock_event_id"})
+        self.update_event = AsyncMock(return_value={"id": "mock_event_id"})
+        self.delete_event = AsyncMock(return_value=True)
+
+    async def __call__(self, *args, **kwargs):
+        return self
+
+class MockMicrosoftService:
+    def __init__(self):
+        self.list_events = AsyncMock(return_value=[])
+        self.find_free_slots = AsyncMock(return_value=[])
+        self.create_event = AsyncMock(return_value={"id": "mock_event_id"})
+        self.update_event = AsyncMock(return_value={"id": "mock_event_id"})
+        self.delete_event = AsyncMock(return_value=True)
+
+    async def __call__(self, *args, **kwargs):
+        return self
+
+@pytest.fixture
+def mock_google_service():
+    return MockGoogleService()
+
+@pytest.fixture
+def mock_microsoft_service():
+    return MockMicrosoftService() 

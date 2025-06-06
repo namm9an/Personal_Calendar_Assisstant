@@ -1,14 +1,13 @@
 from pydantic import BaseModel, Field, EmailStr, field_validator
 from typing import List, Optional, Dict, Any, Literal, Union
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 class AttendeeSchema(BaseModel):
     email: EmailStr
     name: Optional[str] = None
-    response_status: Optional[str] = Field("needsAction", description="Attendee's response status.") # Added from old wrapper
-    # Add other relevant attendee fields if necessary
-
+    response_status: Optional[str] = Field("needsAction", description="Attendee's response status.")
+    
     model_config = {"from_attributes": True}
 
 # Defines the structure of an event for tool outputs
@@ -17,29 +16,27 @@ class EventSchema(BaseModel):
     summary: str
     description: Optional[str] = None
     location: Optional[str] = None
-    start_time: str # ISO datetime string e.g., "2024-01-01T10:00:00Z" or "2024-01-01T10:00:00+05:30"
-    end_time: str   # ISO datetime string
-    time_zone: Optional[str] = None # e.g., "America/New_York"
+    start_time: str  # ISO datetime string
+    end_time: str    # ISO datetime string
+    time_zone: Optional[str] = None
     attendees: Optional[List[AttendeeSchema]] = []
     html_link: Optional[str] = None
     calendar_id: str = Field("primary", description="The calendar ID where the event resides.")
     conference_data: Optional[Dict[str, Any]] = Field(None, description="Conference details if any.")
-    # raw_response: Optional[Dict[str, Any]] = Field(None, description="Original raw response from the calendar service.") # Optional, for debugging
-    status: Optional[str] = Field(None, description="Status of the event, e.g., 'confirmed', 'cancelled'.") # Added common field
-    organizer: Optional[AttendeeSchema] = Field(None, description="The organizer of the event.") # Added common field
-    creator: Optional[AttendeeSchema] = Field(None, description="The creator of the event.") # Added common field
+    status: Optional[str] = Field(None, description="Status of the event, e.g., 'confirmed', 'cancelled'.")
+    organizer: Optional[AttendeeSchema] = Field(None, description="The organizer of the event.")
+    creator: Optional[AttendeeSchema] = Field(None, description="The creator of the event.")
 
     model_config = {"from_attributes": True, "extra": 'ignore'}
 
 class ListEventsOutput(BaseModel):
     events: List[EventSchema]
-
     model_config = {"from_attributes": True}
 
 class TimeSlotSchema(BaseModel):
     """Represents a time slot for availability."""
-    start: datetime
-    end: datetime
+    start: str  # ISO datetime string
+    end: str    # ISO datetime string
     conflicting_events: Optional[List[str]] = None  # Names of any events that might conflict
     
     model_config = {"from_attributes": True}
@@ -47,30 +44,43 @@ class TimeSlotSchema(BaseModel):
 class FreeSlotsInput(BaseModel):
     """Input for the find_free_slots tool."""
     
-    duration_minutes: int = Field(..., description="Duration of the meeting in minutes.")
-    start_date: str = Field(..., description="Start date to search from (format: YYYY-MM-DD).")
-    end_date: Optional[str] = Field(
-        None, 
-        description="End date to search until (format: YYYY-MM-DD). Defaults to start_date + 1 day."
-    )
-    start_working_hour: Optional[str] = Field(
-        None,
-        description="Earliest time of day to consider (format: HH:MM, 24-hour). Defaults to user's working hours start."
-    )
-    end_working_hour: Optional[str] = Field(
-        None,
-        description="Latest time of day to consider (format: HH:MM, 24-hour). Defaults to user's working hours end."
-    )
-    attendees: Optional[List[str]] = Field(
-        None,
-        description="List of attendee emails to check availability for."
-    )
-    calendar_id: Optional[str] = Field(
-        "primary", description="Calendar ID to check availability in."
-    )
-    time_zone: Optional[str] = Field(
-        None, description="Time zone for the returned slots. Defaults to user's time zone."
-    )
+    provider: Literal["google", "microsoft"] = Field(..., description="Calendar provider to use")
+    user_id: UUID = Field(..., description="ID of the user finding free slots")
+    duration_minutes: int = Field(..., description="Duration of the free slot in minutes")
+    range_start: str = Field(..., description="Start of the range to search for free slots (format: ISO 8601)")
+    range_end: str = Field(..., description="End of the range to search for free slots (format: ISO 8601)")
+    start_working_hour: Optional[str] = Field(None, description="Start of working hours (format: HH:MM)")
+    end_working_hour: Optional[str] = Field(None, description="End of working hours (format: HH:MM)")
+    calendar_id: Optional[str] = Field("primary", description="Calendar ID to search for free slots in")
+    
+    @field_validator('range_start')
+    @classmethod
+    def validate_range_start(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        try:
+            datetime.fromisoformat(v)
+            return v
+        except ValueError:
+            raise ValueError('range_start must be in ISO 8601 format')
+    
+    @field_validator('range_end')
+    @classmethod
+    def validate_range_end(cls, v, values):
+        if isinstance(v, datetime):
+            v = v.isoformat()
+        try:
+            v_dt = datetime.fromisoformat(v)
+            if 'range_start' in values:
+                start = values['range_start']
+                if isinstance(start, datetime):
+                    start = start.isoformat()
+                start_dt = datetime.fromisoformat(start)
+                if v_dt <= start_dt:
+                    raise ValueError('End time must be after start time')
+            return v
+        except ValueError:
+            raise ValueError('range_end must be in ISO 8601 format')
     
     model_config = {"from_attributes": True}
 
@@ -97,19 +107,41 @@ class CreateEventInput(BaseModel):
     provider: Literal["google", "microsoft"] = Field(..., description="Calendar provider to use")
     user_id: UUID = Field(..., description="ID of the user creating the event")
     summary: str = Field(..., description="Title/summary of the event")
-    start: datetime = Field(..., description="Start time of the event")
-    end: datetime = Field(..., description="End time of the event")
+    start: str = Field(..., description="Start time of the event (format: ISO 8601)")
+    end: str = Field(..., description="End time of the event (format: ISO 8601)")
     description: Optional[str] = Field(None, description="Description of the event")
     location: Optional[str] = Field(None, description="Location of the event")
     attendees: Optional[List[AttendeeSchema]] = Field([], description="List of attendees")
     calendar_id: Optional[str] = Field("primary", description="Calendar ID to create the event in")
     
+    @field_validator('start')
+    @classmethod
+    def validate_start(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        try:
+            datetime.fromisoformat(v)
+            return v
+        except ValueError:
+            raise ValueError('start must be in ISO 8601 format')
+    
     @field_validator('end')
     @classmethod
-    def end_must_be_after_start(cls, v, values):
-        if 'start' in values and v <= values['start']:
-            raise ValueError('End time must be after start time')
-        return v
+    def validate_end(cls, v, values):
+        if isinstance(v, datetime):
+            v = v.isoformat()
+        try:
+            v_dt = datetime.fromisoformat(v)
+            if 'start' in values:
+                start = values['start']
+                if isinstance(start, datetime):
+                    start = start.isoformat()
+                start_dt = datetime.fromisoformat(start)
+                if v_dt <= start_dt:
+                    raise ValueError('End time must be after start time')
+            return v
+        except ValueError:
+            raise ValueError('end must be in ISO 8601 format')
     
     @field_validator('summary')
     @classmethod
@@ -131,26 +163,43 @@ class CreateEventOutput(BaseModel):
 class RescheduleEventInput(BaseModel):
     """Input for the reschedule_event tool."""
     
-    provider_name: Literal["google", "microsoft"] = Field(..., description="Calendar provider to use. Renamed from 'provider'.")
+    provider: Literal["google", "microsoft"] = Field(..., description="Calendar provider to use")
+    user_id: UUID = Field(..., description="ID of the user rescheduling the event")
     event_id: str = Field(..., description="ID of the event to reschedule")
-    new_start_datetime: datetime = Field(..., description="New start date and time for the event. Renamed from 'new_start'.")
-    new_end_datetime: datetime = Field(..., description="New end date and time for the event.")
-    new_time_zone: Optional[str] = Field(None, description="Optional new time zone for the event (e.g., 'America/New_York'). If None, existing or user's default may be used.")
+    new_start: str = Field(..., description="New start time (format: ISO 8601)")
+    new_end: Optional[str] = Field(None, description="New end time (format: ISO 8601)")
     calendar_id: Optional[str] = Field("primary", description="Calendar ID containing the event")
     
-    @field_validator('event_id')
+    @field_validator('new_start')
     @classmethod
-    def event_id_must_not_be_empty(cls, v):
-        if not v.strip():
-            raise ValueError('Event ID cannot be empty')
-        return v
-
-    @field_validator('new_end_datetime')
+    def validate_new_start(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        try:
+            datetime.fromisoformat(v)
+            return v
+        except ValueError:
+            raise ValueError('new_start must be in ISO 8601 format')
+    
+    @field_validator('new_end')
     @classmethod
-    def end_must_be_after_start(cls, v, values):
-        if 'new_start_datetime' in values and v <= values['new_start_datetime']:
-            raise ValueError('New end time must be after new start time')
-        return v
+    def validate_new_end(cls, v, values):
+        if v is None:
+            return v
+        if isinstance(v, datetime):
+            v = v.isoformat()
+        try:
+            v_dt = datetime.fromisoformat(v)
+            if 'new_start' in values:
+                start = values['new_start']
+                if isinstance(start, datetime):
+                    start = start.isoformat()
+                start_dt = datetime.fromisoformat(start)
+                if v_dt <= start_dt:
+                    raise ValueError('New end time must be after new start time')
+            return v
+        except ValueError:
+            raise ValueError('new_end must be in ISO 8601 format')
     
     model_config = {"from_attributes": True}
 
@@ -192,3 +241,57 @@ class CancelEventOutput(BaseModel):
 
 # Alias for backward compatibility and test code that uses FreeSlotSchema
 FreeSlotSchema = TimeSlotSchema
+
+class ListEventsInput(BaseModel):
+    """Input for the list_events tool."""
+    
+    provider: Literal["google", "microsoft"] = Field(..., description="Calendar provider to use")
+    user_id: UUID = Field(..., description="ID of the user listing events")
+    start: str = Field(..., description="Start date to list events from (format: ISO 8601)")
+    end: Optional[str] = Field(None, description="End date to list events until (format: ISO 8601). Defaults to start + 1 day.")
+    calendar_id: Optional[str] = Field("primary", description="Calendar ID to list events from.")
+    
+    @field_validator('start')
+    @classmethod
+    def validate_start(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        try:
+            datetime.fromisoformat(v)
+            return v
+        except ValueError:
+            raise ValueError('start must be in ISO 8601 format')
+    
+    @field_validator('end')
+    @classmethod
+    def validate_end(cls, v, values):
+        if v is None:
+            if 'start' in values:
+                start = values['start']
+                if isinstance(start, datetime):
+                    start = start.isoformat()
+                start_dt = datetime.fromisoformat(start)
+                return (start_dt + timedelta(days=1)).isoformat()
+            return None
+        if isinstance(v, datetime):
+            v = v.isoformat()
+        try:
+            v_dt = datetime.fromisoformat(v)
+            if 'start' in values:
+                start = values['start']
+                if isinstance(start, datetime):
+                    start = start.isoformat()
+                start_dt = datetime.fromisoformat(start)
+                if v_dt <= start_dt:
+                    raise ValueError('End time must be after start time')
+            return v
+        except ValueError:
+            raise ValueError('end must be in ISO 8601 format')
+    
+    model_config = {"from_attributes": True}
+
+class DeleteEventInput(BaseModel):
+    """Input schema for deleting an event."""
+    event_id: str = Field(..., description="ID of the event to delete")
+    calendar_id: Optional[str] = Field("primary", description="ID of the calendar containing the event")
+    user_id: Optional[str] = Field(None, description="ID of the user who owns the event")

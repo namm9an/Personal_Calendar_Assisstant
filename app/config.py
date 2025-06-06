@@ -4,11 +4,12 @@ Configuration settings for the Personal Calendar Assistant.
 from functools import lru_cache
 from typing import List, Optional, Union
 
-from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator, AnyHttpUrl
 
 
 class Settings(BaseSettings):
+    SQLALCHEMY_DATABASE_URI: str = "sqlite:///./test.db"
     """Application settings loaded from environment variables."""
     
     # Application settings
@@ -23,7 +24,7 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api/v1"
     
     # Security
-    SECRET_KEY: str
+    SECRET_KEY: str = "test_secret_key"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     
     # CORS
@@ -40,7 +41,7 @@ class Settings(BaseSettings):
         raise ValueError(v)
     
     # Database
-    MONGODB_URI: str
+    MONGODB_URI: str = "mongodb://localhost:27017"
     MONGODB_DB: str = "calendar_assistant"
     DATABASE_URL: Optional[str] = None
     
@@ -53,9 +54,9 @@ class Settings(BaseSettings):
         return values.data.get("MONGODB_URI")
     
     # Redis
-    REDIS_HOST: str
-    REDIS_PORT: str
-    REDIS_DB: str
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
     REDIS_URL: Optional[str] = None
     
     @field_validator("REDIS_URL", mode="before")
@@ -67,23 +68,23 @@ class Settings(BaseSettings):
         return f"redis://{values.data.get('REDIS_HOST')}:{values.data.get('REDIS_PORT')}/{values.data.get('REDIS_DB')}"
     
     # Google OAuth
-    GOOGLE_CLIENT_ID: str
-    GOOGLE_CLIENT_SECRET: str
-    GOOGLE_REDIRECT_URI: str
+    GOOGLE_CLIENT_ID: str = "test_google_client_id"
+    GOOGLE_CLIENT_SECRET: str = "test_google_client_secret"
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
     GOOGLE_AUTH_SCOPES: str = "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events"
     
     # Microsoft OAuth
-    MS_CLIENT_ID: str
-    MS_CLIENT_SECRET: str
-    MS_TENANT_ID: str
+    MS_CLIENT_ID: str = "test_ms_client_id"
+    MS_CLIENT_SECRET: str = "test_ms_client_secret"
+    MS_TENANT_ID: str = "test_ms_tenant_id"
     MS_REDIRECT_URI: str = "http://localhost:8000/auth/microsoft/callback"
     MS_AUTH_SCOPES: str = "Calendars.ReadWrite User.Read"
     
     # Token Encryption
-    TOKEN_ENCRYPTION_KEY: str
+    TOKEN_ENCRYPTION_KEY: str = "test_token_encryption_key"
     
     # LLM settings
-    GEMINI_API_KEY: str
+    GEMINI_API_KEY: str = "test_gemini_api_key"
     DEFAULT_LLM_MODEL: str = "gemini-pro"
     FALLBACK_LLM_MODEL: str = "local-llama"
     
@@ -94,11 +95,23 @@ class Settings(BaseSettings):
     
     # Monitoring
     ENABLE_PROMETHEUS: bool = True
-
+    
+    # Rate Limiting
+    RATE_LIMIT_PER_MINUTE: int = 60
+    AGENT_RATE_LIMIT_PER_MINUTE: int = 30
+    
+    # Calendar Settings
+    DEFAULT_CALENDAR_ID: str = "primary"
+    
+    # OAuth Settings
+    MICROSOFT_CLIENT_ID: Optional[str] = None
+    MICROSOFT_CLIENT_SECRET: Optional[str] = None
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
+        extra="allow"
     )
 
 
@@ -106,3 +119,5 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Create cached settings instance."""
     return Settings()
+
+settings = Settings()

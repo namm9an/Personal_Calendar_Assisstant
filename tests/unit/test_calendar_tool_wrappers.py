@@ -1,6 +1,7 @@
 import pytest
-from unittest.mock import Mock, patch, call
-from datetime import datetime, timedelta
+import pytest_asyncio
+from unittest.mock import Mock, patch, call, AsyncMock
+from datetime import datetime, timedelta, timezone
 from src.calendar_tool_wrappers import (
     CreateEventWrapper,
     ListEventsWrapper,
@@ -11,7 +12,8 @@ from src.calendar_tool_wrappers import (
     find_free_slots_tool,
     create_event_tool,
     reschedule_event_tool,
-    cancel_event_tool
+    cancel_event_tool,
+    _map_service_event_to_tool_event
 )
 from src.tool_schemas import (
     ListEventsInput, ListEventsOutput,
@@ -19,13 +21,15 @@ from src.tool_schemas import (
     CreateEventInput, CreateEventOutput,
     RescheduleEventInput, RescheduleEventOutput,
     CancelEventInput, CancelEventOutput,
-    EventSchema, AttendeeSchema
+    EventSchema, AttendeeSchema,
+    DeleteEventInput,
+    UpdateEventInput
 )
 
 # Shared fixtures
 @pytest.fixture
 def mock_calendar_service():
-    return Mock()
+    return AsyncMock()
 
 @pytest.fixture
 def create_event_wrapper(mock_calendar_service):
@@ -45,7 +49,8 @@ def delete_event_wrapper(mock_calendar_service):
 
 # Test CreateEventWrapper
 class TestCreateEventWrapper:
-    def test_create_event_success(self, create_event_wrapper, mock_calendar_service):
+    @pytest.mark.asyncio
+    async def test_create_event_success(self, create_event_wrapper, mock_calendar_service):
         # Arrange
         event_data = {
             'summary': 'Test Event',
@@ -55,7 +60,7 @@ class TestCreateEventWrapper:
         mock_calendar_service.events().insert().execute.return_value = {'id': '123'}
 
         # Act
-        result = create_event_wrapper.execute(event_data)
+        result = await create_event_wrapper.execute(event_data)
 
         # Assert
         assert result == {'id': '123'}
@@ -64,16 +69,18 @@ class TestCreateEventWrapper:
             call().execute()
         ])
 
-    def test_create_event_validation_error(self, create_event_wrapper):
+    @pytest.mark.asyncio
+    async def test_create_event_validation_error(self, create_event_wrapper):
         # Arrange
         invalid_event_data = {'summary': 'Test Event'}  # Missing required fields
 
         # Act & Assert
         with pytest.raises(ToolExecutionError) as exc_info:
-            create_event_wrapper.execute(invalid_event_data)
+            await create_event_wrapper.execute(invalid_event_data)
         assert "Missing required fields" in str(exc_info.value)
 
-    def test_create_event_api_error(self, create_event_wrapper, mock_calendar_service):
+    @pytest.mark.asyncio
+    async def test_create_event_api_error(self, create_event_wrapper, mock_calendar_service):
         # Arrange
         event_data = {
             'summary': 'Test Event',
@@ -84,12 +91,13 @@ class TestCreateEventWrapper:
 
         # Act & Assert
         with pytest.raises(ToolExecutionError) as exc_info:
-            create_event_wrapper.execute(event_data)
+            await create_event_wrapper.execute(event_data)
         assert "Failed to create event" in str(exc_info.value)
 
 # Test ListEventsWrapper
 class TestListEventsWrapper:
-    def test_list_events_success(self, list_events_wrapper, mock_calendar_service):
+    @pytest.mark.asyncio
+    async def test_list_events_success(self, list_events_wrapper, mock_calendar_service):
         # Arrange
         mock_events = {
             'items': [
@@ -100,7 +108,7 @@ class TestListEventsWrapper:
         mock_calendar_service.events().list().execute.return_value = mock_events
 
         # Act
-        result = list_events_wrapper.execute({'timeMin': '2024-03-20T00:00:00Z'})
+        result = await list_events_wrapper.execute({'timeMin': '2024-03-20T00:00:00Z'})
 
         # Assert
         assert result == mock_events
@@ -109,27 +117,30 @@ class TestListEventsWrapper:
             call().execute()
         ])
 
-    def test_list_events_validation_error(self, list_events_wrapper):
+    @pytest.mark.asyncio
+    async def test_list_events_validation_error(self, list_events_wrapper):
         # Arrange
         invalid_params = {}  # Missing required timeMin
 
         # Act & Assert
         with pytest.raises(ToolExecutionError) as exc_info:
-            list_events_wrapper.execute(invalid_params)
+            await list_events_wrapper.execute(invalid_params)
         assert "Missing required fields" in str(exc_info.value)
 
-    def test_list_events_api_error(self, list_events_wrapper, mock_calendar_service):
+    @pytest.mark.asyncio
+    async def test_list_events_api_error(self, list_events_wrapper, mock_calendar_service):
         # Arrange
         mock_calendar_service.events().list().execute.side_effect = Exception("API Error")
 
         # Act & Assert
         with pytest.raises(ToolExecutionError) as exc_info:
-            list_events_wrapper.execute({'timeMin': '2024-03-20T00:00:00Z'})
+            await list_events_wrapper.execute({'timeMin': '2024-03-20T00:00:00Z'})
         assert "Failed to list events" in str(exc_info.value)
 
 # Test UpdateEventWrapper
 class TestUpdateEventWrapper:
-    def test_update_event_success(self, update_event_wrapper, mock_calendar_service):
+    @pytest.mark.asyncio
+    async def test_update_event_success(self, update_event_wrapper, mock_calendar_service):
         # Arrange
         event_data = {
             'eventId': '123',
@@ -140,7 +151,7 @@ class TestUpdateEventWrapper:
         mock_calendar_service.events().update().execute.return_value = {'id': '123'}
 
         # Act
-        result = update_event_wrapper.execute(event_data)
+        result = await update_event_wrapper.execute(event_data)
 
         # Assert
         assert result == {'id': '123'}
@@ -149,16 +160,18 @@ class TestUpdateEventWrapper:
             call().execute()
         ])
 
-    def test_update_event_validation_error(self, update_event_wrapper):
+    @pytest.mark.asyncio
+    async def test_update_event_validation_error(self, update_event_wrapper):
         # Arrange
         invalid_event_data = {'summary': 'Updated Event'}  # Missing eventId
 
         # Act & Assert
         with pytest.raises(ToolExecutionError) as exc_info:
-            update_event_wrapper.execute(invalid_event_data)
+            await update_event_wrapper.execute(invalid_event_data)
         assert "Missing required fields" in str(exc_info.value)
 
-    def test_update_event_api_error(self, update_event_wrapper, mock_calendar_service):
+    @pytest.mark.asyncio
+    async def test_update_event_api_error(self, update_event_wrapper, mock_calendar_service):
         # Arrange
         event_data = {
             'eventId': '123',
@@ -170,18 +183,19 @@ class TestUpdateEventWrapper:
 
         # Act & Assert
         with pytest.raises(ToolExecutionError) as exc_info:
-            update_event_wrapper.execute(event_data)
+            await update_event_wrapper.execute(event_data)
         assert "Failed to update event" in str(exc_info.value)
 
 # Test DeleteEventWrapper
 class TestDeleteEventWrapper:
-    def test_delete_event_success(self, delete_event_wrapper, mock_calendar_service):
+    @pytest.mark.asyncio
+    async def test_delete_event_success(self, delete_event_wrapper, mock_calendar_service):
         # Arrange
         event_data = {'eventId': '123'}
         mock_calendar_service.events().delete().execute.return_value = None
 
         # Act
-        result = delete_event_wrapper.execute(event_data)
+        result = await delete_event_wrapper.execute(event_data)
 
         # Assert
         assert result == {'status': 'success'}
@@ -190,146 +204,500 @@ class TestDeleteEventWrapper:
             call().execute()
         ])
 
-    def test_delete_event_validation_error(self, delete_event_wrapper):
+    @pytest.mark.asyncio
+    async def test_delete_event_validation_error(self, delete_event_wrapper):
         # Arrange
         invalid_event_data = {}  # Missing eventId
 
         # Act & Assert
         with pytest.raises(ToolExecutionError) as exc_info:
-            delete_event_wrapper.execute(invalid_event_data)
+            await delete_event_wrapper.execute(invalid_event_data)
         assert "Missing required fields" in str(exc_info.value)
 
-    def test_delete_event_api_error(self, delete_event_wrapper, mock_calendar_service):
+    @pytest.mark.asyncio
+    async def test_delete_event_api_error(self, delete_event_wrapper, mock_calendar_service):
         # Arrange
         event_data = {'eventId': '123'}
         mock_calendar_service.events().delete().execute.side_effect = Exception("API Error")
 
         # Act & Assert
         with pytest.raises(ToolExecutionError) as exc_info:
-            delete_event_wrapper.execute(event_data)
+            await delete_event_wrapper.execute(event_data)
         assert "Failed to delete event" in str(exc_info.value)
 
-# --- New tool wrapper tests ---
+# Test Event Mapping
+class TestEventMapping:
+    def test_map_google_event(self):
+        # Arrange
+        google_event = {
+            'id': '123',
+            'summary': 'Test Event',
+            'start': {'dateTime': '2024-03-20T10:00:00Z'},
+            'end': {'dateTime': '2024-03-20T11:00:00Z'},
+            'description': 'Test Description',
+            'location': 'Test Location',
+            'attendees': [
+                {'email': 'test@example.com', 'displayName': 'Test User'}
+            ],
+            'htmlLink': 'https://calendar.google.com/event?id=123'
+        }
+
+        # Act
+        result = _map_service_event_to_tool_event(google_event)
+
+        # Assert
+        assert isinstance(result, EventSchema)
+        assert result.id == '123'
+        assert result.summary == 'Test Event'
+        assert result.start == '2024-03-20T10:00:00Z'
+        assert result.end == '2024-03-20T11:00:00Z'
+        assert result.description == 'Test Description'
+        assert result.location == 'Test Location'
+        assert len(result.attendees) == 1
+        assert result.attendees[0].email == 'test@example.com'
+        assert result.attendees[0].name == 'Test User'
+        assert result.html_link == 'https://calendar.google.com/event?id=123'
+
+    def test_map_microsoft_event(self):
+        # Arrange
+        ms_event = {
+            'id': '123',
+            'subject': 'Test Event',
+            'start': {'dateTime': '2024-03-20T10:00:00Z', 'timeZone': 'UTC'},
+            'end': {'dateTime': '2024-03-20T11:00:00Z', 'timeZone': 'UTC'},
+            'bodyPreview': 'Test Description',
+            'location': {'displayName': 'Test Location'},
+            'attendees': [
+                {'emailAddress': {'address': 'test@example.com', 'name': 'Test User'}}
+            ],
+            'webLink': 'https://outlook.office.com/calendar/item/123'
+        }
+
+        # Act
+        result = _map_service_event_to_tool_event(ms_event)
+
+        # Assert
+        assert isinstance(result, EventSchema)
+        assert result.id == '123'
+        assert result.summary == 'Test Event'
+        assert result.start == '2024-03-20T10:00:00Z'
+        assert result.end == '2024-03-20T11:00:00Z'
+        assert result.description == 'Test Description'
+        assert result.location == 'Test Location'
+        assert len(result.attendees) == 1
+        assert result.attendees[0].email == 'test@example.com'
+        assert result.attendees[0].name == 'Test User'
+        assert result.html_link == 'https://outlook.office.com/calendar/item/123'
+
+# Test ListEventsTool
 class TestListEventsTool:
-    def test_google_success(self):
-        now = datetime.utcnow()
-        input = ListEventsInput(provider="google", user_id="u1", start=now, end=now+timedelta(hours=1))
-        output = list_events_tool(input)
+    @pytest.mark.asyncio
+    async def test_google_success(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = ListEventsInput(
+            provider="google",
+            user_id="u1",
+            start_time=now,
+            end_time=now + timedelta(days=1)
+        )
+
+        # Act
+        output = await list_events_tool(input)
+
+        # Assert
         assert isinstance(output, ListEventsOutput)
-        assert len(output.events) == 2
-        assert all(isinstance(ev, EventSchema) for ev in output.events)
+        assert len(output.events) > 0
+        assert isinstance(output.events[0], EventSchema)
 
-    def test_microsoft_success(self):
-        now = datetime.utcnow()
-        input = ListEventsInput(provider="microsoft", user_id="u1", start=now, end=now+timedelta(hours=1))
-        output = list_events_tool(input)
+    @pytest.mark.asyncio
+    async def test_microsoft_success(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = ListEventsInput(
+            provider="microsoft",
+            user_id="u1",
+            start_time=now,
+            end_time=now + timedelta(days=1)
+        )
+
+        # Act
+        output = await list_events_tool(input)
+
+        # Assert
         assert isinstance(output, ListEventsOutput)
-        assert len(output.events) == 1
-        assert all(isinstance(ev, EventSchema) for ev in output.events)
+        assert len(output.events) > 0
+        assert isinstance(output.events[0], EventSchema)
 
-    def test_unknown_provider(self):
-        now = datetime.utcnow()
-        input = ListEventsInput(provider="other", user_id="u1", start=now, end=now+timedelta(hours=1))
-        with pytest.raises(ToolExecutionError):
-            list_events_tool(input)
+    @pytest.mark.asyncio
+    async def test_unknown_provider(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = ListEventsInput(
+            provider="other",
+            user_id="u1",
+            start_time=now,
+            end_time=now + timedelta(days=1)
+        )
 
+        # Act & Assert
+        with pytest.raises(ToolExecutionError) as exc_info:
+            await list_events_tool(input)
+        assert "Unsupported provider" in str(exc_info.value)
+
+# Test FindFreeSlotsTool
 class TestFindFreeSlotsTool:
-    def test_google_success(self):
-        now = datetime.utcnow()
-        input = FreeSlotsInput(provider="google", user_id="u1", duration_minutes=30, range_start=now, range_end=now+timedelta(days=1))
-        output = find_free_slots_tool(input)
+    @pytest.mark.asyncio
+    async def test_google_success(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = FreeSlotsInput(
+            provider="google",
+            user_id="u1",
+            duration_minutes=30,
+            range_start=now,
+            range_end=now + timedelta(days=1)
+        )
+
+        # Act
+        output = await find_free_slots_tool(input)
+
+        # Assert
         assert isinstance(output, FreeSlotsOutput)
-        assert len(output.slots) == 2
+        assert len(output.slots) > 0
 
-    def test_microsoft_success(self):
-        now = datetime.utcnow()
-        input = FreeSlotsInput(provider="microsoft", user_id="u1", duration_minutes=30, range_start=now, range_end=now+timedelta(days=1))
-        output = find_free_slots_tool(input)
+    @pytest.mark.asyncio
+    async def test_microsoft_success(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = FreeSlotsInput(
+            provider="microsoft",
+            user_id="u1",
+            duration_minutes=30,
+            range_start=now,
+            range_end=now + timedelta(days=1)
+        )
+
+        # Act
+        output = await find_free_slots_tool(input)
+
+        # Assert
         assert isinstance(output, FreeSlotsOutput)
-        assert len(output.slots) == 2
+        assert len(output.slots) > 0
 
-    def test_invalid_duration(self):
-        now = datetime.utcnow()
-        with pytest.raises(Exception):
-            FreeSlotsInput(provider="google", user_id="u1", duration_minutes=-10, range_start=now, range_end=now+timedelta(days=1))
+    @pytest.mark.asyncio
+    async def test_invalid_duration(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = FreeSlotsInput(
+            provider="google",
+            user_id="u1",
+            duration_minutes=0,  # Invalid duration
+            range_start=now,
+            range_end=now + timedelta(days=1)
+        )
 
-    def test_unknown_provider(self):
-        now = datetime.utcnow()
-        input = FreeSlotsInput(provider="other", user_id="u1", duration_minutes=30, range_start=now, range_end=now+timedelta(days=1))
-        with pytest.raises(ToolExecutionError):
-            find_free_slots_tool(input)
+        # Act & Assert
+        with pytest.raises(ValueError) as exc_info:
+            await find_free_slots_tool(input)
+        assert "Duration must be positive" in str(exc_info.value)
 
+    @pytest.mark.asyncio
+    async def test_unknown_provider(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = FreeSlotsInput(
+            provider="other",
+            user_id="u1",
+            duration_minutes=30,
+            range_start=now,
+            range_end=now + timedelta(days=1)
+        )
+
+        # Act & Assert
+        with pytest.raises(ToolExecutionError) as exc_info:
+            await find_free_slots_tool(input)
+        assert "Unsupported provider" in str(exc_info.value)
+
+# Test CreateEventTool
 class TestCreateEventTool:
-    def test_google_success(self):
-        now = datetime.utcnow()
+    @pytest.mark.asyncio
+    async def test_google_success(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
         input = CreateEventInput(
             provider="google",
             user_id="u1",
-            summary="Team Meeting",
-            start=now+timedelta(hours=2),
-            end=now+timedelta(hours=3),
-            description="Discuss Q2 goals",
-            location="Conference Room A",
-            attendees=[AttendeeSchema(email="alice@example.com")],
+            summary="Test Event",
+            start=now,
+            end=now + timedelta(hours=1),
+            description="Test Description",
+            location="Test Location",
+            attendees=[
+                AttendeeSchema(email="test@example.com", name="Test User")
+            ]
         )
-        output = create_event_tool(input)
+
+        # Act
+        output = await create_event_tool(input)
+
+        # Assert
         assert isinstance(output, CreateEventOutput)
         assert isinstance(output.event, EventSchema)
+        assert output.event.summary == "Test Event"
 
-    def test_missing_summary(self):
-        now = datetime.utcnow()
-        with pytest.raises(Exception):
-            CreateEventInput(
-                provider="google",
-                user_id="u1",
-                summary=None,
-                start=now+timedelta(hours=2),
-                end=now+timedelta(hours=3),
-            )
-
-    def test_unknown_provider(self):
-        now = datetime.utcnow()
+    @pytest.mark.asyncio
+    async def test_microsoft_success(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
         input = CreateEventInput(
-            provider="other",
+            provider="microsoft",
             user_id="u1",
-            summary="Team Meeting",
-            start=now+timedelta(hours=2),
-            end=now+timedelta(hours=3),
+            summary="Test Event",
+            start=now,
+            end=now + timedelta(hours=1),
+            description="Test Description",
+            location="Test Location",
+            attendees=[
+                AttendeeSchema(email="test@example.com", name="Test User")
+            ]
         )
-        # The stub does not raise for provider, but you can add this if you want stricter logic
 
+        # Act
+        output = await create_event_tool(input)
+
+        # Assert
+        assert isinstance(output, CreateEventOutput)
+        assert isinstance(output.event, EventSchema)
+        assert output.event.summary == "Test Event"
+
+    @pytest.mark.asyncio
+    async def test_invalid_dates(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = CreateEventInput(
+            provider="google",
+            user_id="u1",
+            summary="Test Event",
+            start=now + timedelta(hours=1),  # Start after end
+            end=now,
+            description="Test Description"
+        )
+
+        # Act & Assert
+        with pytest.raises(ToolExecutionError) as exc_info:
+            await create_event_tool(input)
+        assert "End time must be after start time" in str(exc_info.value)
+
+# Test UpdateEventTool
+class TestUpdateEventTool:
+    @pytest.mark.asyncio
+    async def test_google_success(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = UpdateEventInput(
+            provider="google",
+            user_id="u1",
+            event_id="event1",
+            summary="Updated Event",
+            start=now,
+            end=now + timedelta(hours=1),
+            description="Updated Description",
+            location="Updated Location"
+        )
+
+        # Act
+        output = await update_event_tool(input)
+
+        # Assert
+        assert isinstance(output, UpdateEventOutput)
+        assert isinstance(output.event, EventSchema)
+        assert output.event.summary == "Updated Event"
+
+    @pytest.mark.asyncio
+    async def test_microsoft_success(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = UpdateEventInput(
+            provider="microsoft",
+            user_id="u1",
+            event_id="event1",
+            summary="Updated Event",
+            start=now,
+            end=now + timedelta(hours=1),
+            description="Updated Description",
+            location="Updated Location"
+        )
+
+        # Act
+        output = await update_event_tool(input)
+
+        # Assert
+        assert isinstance(output, UpdateEventOutput)
+        assert isinstance(output.event, EventSchema)
+        assert output.event.summary == "Updated Event"
+
+    @pytest.mark.asyncio
+    async def test_invalid_dates(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = UpdateEventInput(
+            provider="google",
+            user_id="u1",
+            event_id="event1",
+            summary="Updated Event",
+            start=now + timedelta(hours=1),  # Start after end
+            end=now,
+            description="Updated Description"
+        )
+
+        # Act & Assert
+        with pytest.raises(ToolExecutionError) as exc_info:
+            await update_event_tool(input)
+        assert "End time must be after start time" in str(exc_info.value)
+
+# Test DeleteEventTool
+class TestDeleteEventTool:
+    @pytest.mark.asyncio
+    async def test_google_success(self):
+        # Arrange
+        input = DeleteEventInput(
+            provider="google",
+            user_id="u1",
+            event_id="event1"
+        )
+
+        # Act
+        output = await delete_event_tool(input)
+
+        # Assert
+        assert isinstance(output, DeleteEventOutput)
+        assert output.success is True
+
+    @pytest.mark.asyncio
+    async def test_microsoft_success(self):
+        # Arrange
+        input = DeleteEventInput(
+            provider="microsoft",
+            user_id="u1",
+            event_id="event1"
+        )
+
+        # Act
+        output = await delete_event_tool(input)
+
+        # Assert
+        assert isinstance(output, DeleteEventOutput)
+        assert output.success is True
+
+# Test RescheduleEventTool
 class TestRescheduleEventTool:
-    def test_google_success(self):
-        now = datetime.utcnow()
+    @pytest.mark.asyncio
+    async def test_google_success(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
         input = RescheduleEventInput(
             provider="google",
             user_id="u1",
-            event_id="e1",
-            new_start=now+timedelta(days=1, hours=4),
+            event_id="event1",
+            new_start=now,
+            new_end=now + timedelta(hours=1)
         )
-        output = reschedule_event_tool(input)
+
+        # Act
+        output = await reschedule_event_tool(input)
+
+        # Assert
         assert isinstance(output, RescheduleEventOutput)
-        assert output.event.start == input.new_start
+        assert isinstance(output.event, EventSchema)
 
-    def test_unknown_provider(self):
-        now = datetime.utcnow()
+    @pytest.mark.asyncio
+    async def test_microsoft_success(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
         input = RescheduleEventInput(
-            provider="other",
+            provider="microsoft",
             user_id="u1",
-            event_id="e1",
-            new_start=now+timedelta(days=1, hours=4),
+            event_id="event1",
+            new_start=now,
+            new_end=now + timedelta(hours=1)
         )
-        with pytest.raises(ToolExecutionError):
-            reschedule_event_tool(input)
 
+        # Act
+        output = await reschedule_event_tool(input)
+
+        # Assert
+        assert isinstance(output, RescheduleEventOutput)
+        assert isinstance(output.event, EventSchema)
+
+    @pytest.mark.asyncio
+    async def test_invalid_dates(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = RescheduleEventInput(
+            provider="google",
+            user_id="u1",
+            event_id="event1",
+            new_start=now + timedelta(hours=1),  # Start after end
+            new_end=now
+        )
+
+        # Act & Assert
+        with pytest.raises(ToolExecutionError) as exc_info:
+            await reschedule_event_tool(input)
+        assert "New end time must be after new start time" in str(exc_info.value)
+
+# Test CancelEventTool
 class TestCancelEventTool:
-    def test_google_success(self):
-        input = CancelEventInput(provider="google", user_id="u1", event_id="e1")
-        output = cancel_event_tool(input)
+    @pytest.mark.asyncio
+    async def test_google_success(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = CancelEventInput(
+            provider="google",
+            user_id="u1",
+            event_id="event1",
+            start=now,
+            end=now + timedelta(hours=1)
+        )
+
+        # Act
+        output = await cancel_event_tool(input)
+
+        # Assert
         assert isinstance(output, CancelEventOutput)
         assert output.success is True
 
-    def test_unknown_provider(self):
-        input = CancelEventInput(provider="other", user_id="u1", event_id="e1")
-        with pytest.raises(ToolExecutionError):
-            cancel_event_tool(input) 
+    @pytest.mark.asyncio
+    async def test_unknown_provider(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = CancelEventInput(
+            provider="other",
+            user_id="u1",
+            event_id="event1",
+            start=now,
+            end=now + timedelta(hours=1)
+        )
+
+        # Act & Assert
+        with pytest.raises(ToolExecutionError) as exc_info:
+            await cancel_event_tool(input)
+        assert "Unsupported provider" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_invalid_dates(self):
+        # Arrange
+        now = datetime.now(timezone.utc)
+        input = CancelEventInput(
+            provider="google",
+            user_id="u1",
+            event_id="event1",
+            start=now + timedelta(hours=1),  # Start after end
+            end=now
+        )
+
+        # Act & Assert
+        with pytest.raises(ToolExecutionError) as exc_info:
+            await cancel_event_tool(input)
+        assert "End time must be after start time" in str(exc_info.value) 

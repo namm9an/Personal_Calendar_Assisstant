@@ -1,49 +1,76 @@
-from pydantic import BaseModel, Field, EmailStr, validator
+from pydantic import BaseModel, ConfigDict, field_validator, Field
 from typing import List, Optional
 from datetime import datetime
 
 class AttendeeSchema(BaseModel):
-    email: EmailStr
+    """Schema for event attendees."""
+    email: str
+    name: Optional[str] = None
+    response_status: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 class EventSchema(BaseModel):
+    """Schema for calendar events."""
     id: str
     summary: str
-    start: datetime
-    end: datetime
+    start: str
+    end: str
     description: Optional[str] = None
     location: Optional[str] = None
-    attendees: Optional[List[AttendeeSchema]] = None
+    attendees: List[AttendeeSchema] = Field(default_factory=list)
+    html_link: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
-class ListEventsInput(BaseModel):
+class EventInput(BaseModel):
     provider: str
     user_id: str
-    start: datetime
-    end: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+class ListEventsInput(EventInput):
+    """Input schema for listing events."""
+    start: str
+    end: str
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('start', 'end', mode='before')
+    @classmethod
+    def convert_datetime(cls, value):
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
 
 class ListEventsOutput(BaseModel):
+    """Output schema for listing events."""
     events: List[EventSchema]
-
-class FreeSlotsInput(BaseModel):
-    provider: str
-    user_id: str
-    duration_minutes: int
-    range_start: datetime
-    range_end: datetime
-
-    @validator('duration_minutes')
-    def duration_positive(cls, v):
-        if v <= 0:
-            raise ValueError('duration_minutes must be positive')
-        return v
+    model_config = ConfigDict(from_attributes=True)
 
 class FreeSlotSchema(BaseModel):
-    start: datetime
-    end: datetime
+    """Schema for free time slots."""
+    start: str
+    end: str
+    model_config = ConfigDict(from_attributes=True)
+
+class FreeSlotsInput(EventInput):
+    """Input schema for finding free slots."""
+    duration_minutes: int
+    range_start: str
+    range_end: str
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('range_start', 'range_end', mode='before')
+    @classmethod
+    def convert_datetime(cls, value):
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
 
 class FreeSlotsOutput(BaseModel):
+    """Output schema for finding free slots."""
     slots: List[FreeSlotSchema]
+    model_config = ConfigDict(from_attributes=True)
 
 class CreateEventInput(BaseModel):
+    """Input schema for creating events."""
     provider: str
     user_id: str
     summary: str
@@ -51,24 +78,114 @@ class CreateEventInput(BaseModel):
     end: datetime
     description: Optional[str] = None
     location: Optional[str] = None
-    attendees: Optional[List[AttendeeSchema]] = None
+    attendees: List[AttendeeSchema] = Field(default_factory=list)
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("start", "end", mode="before")
+    @classmethod
+    def parse_datetime(cls, v):
+        if isinstance(v, str):
+            return datetime.fromisoformat(v)
+        return v
 
 class CreateEventOutput(BaseModel):
+    """Output schema for creating events."""
     event: EventSchema
+    status: str = "success"
+    model_config = ConfigDict(from_attributes=True)
 
 class RescheduleEventInput(BaseModel):
+    """Input schema for rescheduling events."""
     provider: str
     user_id: str
     event_id: str
     new_start: datetime
+    new_end: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("new_start", "new_end", mode="before")
+    @classmethod
+    def parse_datetime(cls, v):
+        if isinstance(v, str):
+            return datetime.fromisoformat(v)
+        return v
 
 class RescheduleEventOutput(BaseModel):
+    """Output schema for rescheduling events."""
     event: EventSchema
+    status: str = "success"
+    model_config = ConfigDict(from_attributes=True)
 
 class CancelEventInput(BaseModel):
+    """Input schema for canceling events."""
     provider: str
     user_id: str
     event_id: str
+    start: datetime
+    end: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("start", "end", mode="before")
+    @classmethod
+    def parse_datetime(cls, v):
+        if isinstance(v, str):
+            return datetime.fromisoformat(v)
+        return v
 
 class CancelEventOutput(BaseModel):
-    success: bool 
+    """Output schema for canceling events."""
+    success: bool = True
+    status: str = "success"
+    model_config = ConfigDict(from_attributes=True)
+
+class DeleteEventInput(BaseModel):
+    """Input schema for deleting events."""
+    provider: str
+    user_id: str
+    event_id: str
+    model_config = ConfigDict(from_attributes=True)
+
+class UpdateEventInput(BaseModel):
+    """Input schema for updating events."""
+    provider: str
+    user_id: str
+    event_id: str
+    summary: Optional[str] = None
+    start: Optional[datetime] = None
+    end: Optional[datetime] = None
+    description: Optional[str] = None
+    location: Optional[str] = None
+    attendees: Optional[List[AttendeeSchema]] = Field(default_factory=list)
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("start", "end", mode="before")
+    @classmethod
+    def parse_datetime(cls, v):
+        if isinstance(v, str):
+            return datetime.fromisoformat(v)
+        return v
+
+class UpdateEventOutput(BaseModel):
+    """Output schema for updating events."""
+    event: EventSchema
+    status: str = "success"
+    model_config = ConfigDict(from_attributes=True)
+
+class FindFreeSlotsInput(BaseModel):
+    provider: str
+    user_id: str
+    range_start: datetime
+    range_end: datetime
+    duration_minutes: int
+
+    @field_validator("range_start", "range_end", mode="before")
+    @classmethod
+    def parse_datetime(cls, v):
+        if isinstance(v, str):
+            return datetime.fromisoformat(v)
+        return v
+
+class DeleteEventOutput(BaseModel):
+    success: bool
+
+# Add other models as needed, following the same pattern. 

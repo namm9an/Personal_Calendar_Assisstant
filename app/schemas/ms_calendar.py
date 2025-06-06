@@ -1,7 +1,7 @@
 """
 Microsoft Calendar schemas for the Personal Calendar Assistant.
 """
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, model_validator, field_validator
@@ -9,25 +9,40 @@ from pydantic import BaseModel, Field, model_validator, field_validator
 
 class MSAttendee(BaseModel):
     """Schema for an event attendee."""
-    email: str
-    name: Optional[str] = None
+    email: str = Field(..., description="Email address of the attendee")
+    name: Optional[str] = Field(None, description="Display name of the attendee")
 
 
 class MSTimeSlot(BaseModel):
     """Schema for a time slot."""
-    start: datetime
-    end: datetime
+    start: datetime = Field(..., description="Start time of the slot")
+    end: datetime = Field(..., description="End time of the slot")
+    
+    @model_validator(mode='after')
+    def validate_dates(self) -> 'MSTimeSlot':
+        """Validate that end is after start."""
+        if self.start >= self.end:
+            raise ValueError("End time must be after start time")
+        return self
 
 
 class MSCalendarEventBase(BaseModel):
     """Base fields for calendar event schemas."""
-    summary: str
-    description: Optional[str] = None
-    location: Optional[str] = None
-    start: datetime
-    end: datetime
-    is_all_day: Optional[bool] = False
-    attendees: Optional[List[Dict[str, str]]] = None
+    summary: str = Field(..., description="Event title or summary")
+    description: Optional[str] = Field(None, description="Event description")
+    location: Optional[str] = Field(None, description="Event location")
+    start: datetime = Field(..., description="Event start time")
+    end: datetime = Field(..., description="Event end time")
+    is_all_day: Optional[bool] = Field(False, description="Whether the event is an all-day event")
+    attendees: Optional[List[Dict[str, str]]] = Field(None, description="List of event attendees")
+    
+    @field_validator('start', 'end')
+    @classmethod
+    def validate_timezone(cls, v: datetime) -> datetime:
+        """Ensure datetime has timezone info."""
+        if v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
 
 
 class MSCalendarCreate(MSCalendarEventBase):
@@ -36,20 +51,28 @@ class MSCalendarCreate(MSCalendarEventBase):
     @model_validator(mode='after')
     def validate_dates(self) -> 'MSCalendarCreate':
         """Validate that end is after start."""
-        if self.start and self.end and self.start >= self.end:
+        if self.start >= self.end:
             raise ValueError("End time must be after start time")
         return self
 
 
 class MSCalendarUpdate(BaseModel):
     """Schema for updating an existing calendar event."""
-    summary: Optional[str] = None
-    description: Optional[str] = None
-    location: Optional[str] = None
-    start: Optional[datetime] = None
-    end: Optional[datetime] = None
-    is_all_day: Optional[bool] = None
-    attendees: Optional[List[Dict[str, str]]] = None
+    summary: Optional[str] = Field(None, description="Event title or summary")
+    description: Optional[str] = Field(None, description="Event description")
+    location: Optional[str] = Field(None, description="Event location")
+    start: Optional[datetime] = Field(None, description="Event start time")
+    end: Optional[datetime] = Field(None, description="Event end time")
+    is_all_day: Optional[bool] = Field(None, description="Whether the event is an all-day event")
+    attendees: Optional[List[Dict[str, str]]] = Field(None, description="List of event attendees")
+    
+    @field_validator('start', 'end')
+    @classmethod
+    def validate_timezone(cls, v: Optional[datetime]) -> Optional[datetime]:
+        """Ensure datetime has timezone info."""
+        if v is not None and v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
     
     @model_validator(mode='after')
     def validate_dates(self) -> 'MSCalendarUpdate':
@@ -61,23 +84,43 @@ class MSCalendarUpdate(BaseModel):
 
 class MSCalendarEvent(MSCalendarEventBase):
     """Schema for calendar event responses."""
-    id: str
-    organizer: Optional[Dict[str, str]] = None
-    created: Optional[datetime] = None
-    updated: Optional[datetime] = None
-    status: Optional[str] = None
-    recurrence: Optional[Any] = None
-    web_link: Optional[str] = None
+    id: str = Field(..., description="Event ID")
+    organizer: Optional[Dict[str, str]] = Field(None, description="Event organizer details")
+    created: Optional[datetime] = Field(None, description="Event creation time")
+    updated: Optional[datetime] = Field(None, description="Event last update time")
+    status: Optional[str] = Field(None, description="Event status")
+    recurrence: Optional[Any] = Field(None, description="Event recurrence pattern")
+    web_link: Optional[str] = Field(None, description="Event web link")
+    
+    @field_validator('created', 'updated')
+    @classmethod
+    def validate_timezone(cls, v: Optional[datetime]) -> Optional[datetime]:
+        """Ensure datetime has timezone info."""
+        if v is not None and v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
     
     model_config = {"from_attributes": True}
 
 
 class MSFreeSlotRequest(BaseModel):
     """Schema for requesting free time slots."""
-    duration_minutes: int = Field(ge=5, le=480)  # Between 5 minutes and 8 hours
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
-    attendees: Optional[List[str]] = None
+    duration_minutes: int = Field(
+        ge=5,
+        le=480,
+        description="Duration of required free slot in minutes (between 5 minutes and 8 hours)"
+    )
+    start_date: Optional[datetime] = Field(None, description="Start of time range to search")
+    end_date: Optional[datetime] = Field(None, description="End of time range to search")
+    attendees: Optional[List[str]] = Field(None, description="List of attendee email addresses")
+    
+    @field_validator('start_date', 'end_date')
+    @classmethod
+    def validate_timezone(cls, v: Optional[datetime]) -> Optional[datetime]:
+        """Ensure datetime has timezone info."""
+        if v is not None and v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
     
     @model_validator(mode='after')
     def validate_dates(self) -> 'MSFreeSlotRequest':
@@ -89,6 +132,6 @@ class MSFreeSlotRequest(BaseModel):
 
 class MSFreeSlotResponse(BaseModel):
     """Schema for free time slot response."""
-    slots: List[MSTimeSlot]
+    slots: List[MSTimeSlot] = Field(..., description="List of available time slots")
     
     model_config = {"from_attributes": True}

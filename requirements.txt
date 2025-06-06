@@ -1,19 +1,20 @@
 # Core Framework
 fastapi==0.104.1
-uvicorn[standard]==0.23.2
-pydantic==2.4.2
-python-dotenv==1.0.0
+uvicorn==0.24.0
 python-multipart==0.0.6
 python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+pydantic==2.4.2
+python-dotenv==1.0.0
 
 # Agent Frameworks
-langchain==0.0.292
+langchain==0.0.335
 langgraph==0.0.24
 langchain-community==0.0.17
 langchain-core<0.2.0,>=0.1.16
 
 # LLM Providers
-langchain-google-genai==0.0.6
+langchain-google-genai==0.0.5
 google-generativeai==0.3.1
 google-api-python-client==2.108.0
 google-auth==2.23.4
@@ -25,37 +26,37 @@ sqlalchemy==2.0.23
 alembic==1.12.1
 psycopg2-binary==2.9.9
 asyncpg==0.28.0
+motor==3.3.1
+pymongo==4.6.0
+bson==0.5.10
+redis==5.0.1
 
 # Caching
-redis==5.0.1
 aioredis==2.0.1
 
 # Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1
-httpx==0.25.0
+pytest-cov==4.1.0
+httpx==0.25.1
 
 # Utilities
 pydantic-settings==2.0.3
 jinja2==3.1.2
-pytz==2023.3
+pytz==2023.3.post1
+requests==2.31.0
 
 # OAuth
 authlib==1.2.1
 msal==1.25.0
 cryptography==41.0.5
-requests==2.31.0
 
 # Development
 black==23.10.1
-isort==5.12.0
 flake8==6.1.0
-email-validator==2.2.0
-
-# MongoDB
-motor==3.3.1
-pymongo==4.6.0
-bson==0.5.10
+mypy==1.6.1
+isort==5.12.0
+email-validator==2.1.0.post1
 
 # Redis
 hiredis==2.3.2
@@ -66,8 +67,12 @@ llama-cpp-python==0.2.11
 # Calendar APIs
 google-auth==2.23.4
 
-# Testing
-pytest-cov==4.1.0
-
 # Monitoring
 prometheus-client==0.17.1
+prometheus-fastapi-instrumentator==6.1.0
+python-json-logger==2.0.7
+
+# Security
+python-dateutil==2.8.2
+aiohttp==3.8.6
+tenacity==8.2.3

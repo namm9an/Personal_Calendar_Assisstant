@@ -1,4 +1,11 @@
-from sqlalchemy.ext.declarative import declarative_base
+"""Base database configuration."""
+from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.ext.declarative import declared_attr
 
-# Define the base for declarative models
-Base = declarative_base()
+class Base(DeclarativeBase):
+    """Base class for all database models."""
+    
+    @declared_attr
+    def __tablename__(cls) -> str:
+        """Generate __tablename__ automatically."""
+        return cls.__name__.lower() 
