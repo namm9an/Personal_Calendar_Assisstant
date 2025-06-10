@@ -1,27 +1,22 @@
-"""Database connection module."""
-from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+"""Database connection module for MongoDB."""
+from motor.motor_asyncio import AsyncIOMotorClient
 from app.core.config import settings
 
-# Create async engine
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DB_ECHO,
-    future=True
-)
+class DBConnection:
+    client: AsyncIOMotorClient = None
 
-# Create async session factory
-async_session = sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False
-)
+db = DBConnection()
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Get database session."""
-    async with async_session() as session:
-        try:
-            yield session
-        finally:
-            await session.close() 
+async def connect_to_mongo():
+    """Connect to MongoDB."""
+    db.client = AsyncIOMotorClient(settings.MONGODB_URI)
+
+async def close_mongo_connection():
+    """Close MongoDB connection."""
+    db.client.close()
+
+async def get_db():
+    """Get MongoDB database instance."""
+    if db.client is None:
+        await connect_to_mongo()
+    return db.client[settings.MONGODB_DB_NAME] 

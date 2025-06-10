@@ -14,10 +14,31 @@ from src.tool_schemas import (
 from pydantic import ValidationError
 from src.services.oauth_service import OAuthService
 from src.core.exceptions import ToolExecutionError
+from src.services.google_calendar_service import GoogleCalendarService
+from src.services.microsoft_calendar_service import MicrosoftCalendarService
 import pytest
 import logging
 
 logger = logging.getLogger(__name__)
+
+async def get_calendar_service(provider: str, user_id: str):
+    """Get calendar service for the provider and user."""
+    oauth_service = OAuthService()
+    user = await oauth_service.get_user_by_id(user_id)
+    
+    if not user:
+        raise ToolExecutionError(f"User not found: {user_id}")
+    
+    if provider == "google":
+        if not user.google_access_token:
+            raise ToolExecutionError("No Google credentials available for this user")
+        return GoogleCalendarService(access_token=user.google_access_token)
+    elif provider == "microsoft":
+        if not user.microsoft_access_token:
+            raise ToolExecutionError("No Microsoft credentials available for this user")
+        return MicrosoftCalendarService(access_token=user.microsoft_access_token)
+    else:
+        raise ToolExecutionError(f"Unsupported provider: {provider}")
 
 class BaseCalendarWrapper:
     """Base class for calendar tool wrappers."""
@@ -147,29 +168,103 @@ class DeleteEventWrapper(BaseCalendarWrapper):
 
 def _map_service_event_to_tool_event(event: dict) -> EventSchema:
     """Map service event to tool event schema."""
+    # Extract start time
+    start_time = ""
+    start_dict = event.get('start', {})
+    if isinstance(start_dict, dict):
+        if 'dateTime' in start_dict:
+            if isinstance(start_dict['dateTime'], dict):
+                # Handle nested dateTime objects
+                start_time = start_dict['dateTime'].get('dateTime', '')
+            elif isinstance(start_dict['dateTime'], datetime):
+                # Handle datetime objects directly
+                start_time = start_dict['dateTime'].isoformat()
+            else:
+                # Handle normal dateTime strings
+                start_time = start_dict['dateTime']
+        elif 'date' in start_dict:
+            # Handle all-day events
+            start_time = start_dict['date']
+    elif isinstance(start_dict, str):
+        # Handle direct string values
+        start_time = start_dict
+    elif isinstance(start_dict, datetime):
+        # Handle direct datetime values
+        start_time = start_dict.isoformat()
+    
+    # Extract end time
+    end_time = ""
+    end_dict = event.get('end', {})
+    if isinstance(end_dict, dict):
+        if 'dateTime' in end_dict:
+            if isinstance(end_dict['dateTime'], dict):
+                # Handle nested dateTime objects
+                end_time = end_dict['dateTime'].get('dateTime', '')
+            elif isinstance(end_dict['dateTime'], datetime):
+                # Handle datetime objects directly
+                end_time = end_dict['dateTime'].isoformat()
+            else:
+                # Handle normal dateTime strings
+                end_time = end_dict['dateTime']
+        elif 'date' in end_dict:
+            # Handle all-day events
+            end_time = end_dict['date']
+    elif isinstance(end_dict, str):
+        # Handle direct string values
+        end_time = end_dict
+    elif isinstance(end_dict, datetime):
+        # Handle direct datetime values
+        end_time = end_dict.isoformat()
+    
+    # Get the summary/subject (different naming conventions between providers)
+    summary = event.get('summary', event.get('subject', ''))
+    
+    # Get location - can be a string or an object with displayName
+    location = ""
+    loc_data = event.get('location', '')
+    if isinstance(loc_data, dict):
+        location = loc_data.get('displayName', '')
+    else:
+        location = str(loc_data)
+    
+    # Get attendees - can be a list of objects with email and name
+    attendees = []
+    for attendee in event.get('attendees', []):
+        email = attendee.get('email', '')
+        name = attendee.get('name', '')
+        response_status = attendee.get('responseStatus', None)
+        if email:
+            attendees.append(AttendeeSchema(email=email, name=name, response_status=response_status))
+    
+    # Get HTML link
+    html_link = event.get('htmlLink', event.get('webLink', ''))
+    
+    # Get description
+    description = event.get('description', '')
+    
+    # Get ID - can be direct ID or Microsoft's ID format
+    event_id = event.get('id', '')
+    if not event_id and 'iCalUId' in event:
+        event_id = event['iCalUId']
+    
     return EventSchema(
-        id=event.get('id', ''),
-        summary=event.get('summary', ''),
-        start=event.get('start', {}).get('dateTime', ''),
-        end=event.get('end', {}).get('dateTime', ''),
-        description=event.get('description', ''),
-        location=event.get('location', {}).get('displayName', '') if isinstance(event.get('location'), dict) else event.get('location', ''),
-        attendees=[
-            AttendeeSchema(
-                email=attendee.get('email', ''),
-                name=attendee.get('displayName', '')
-            )
-            for attendee in event.get('attendees', [])
-        ],
-        html_link=event.get('htmlLink', '')
+        id=event_id,
+        summary=summary,
+        start=start_time,
+        end=end_time,
+        description=description,
+        location=location,
+        attendees=attendees,
+        html_link=html_link
     )
 
 class ListEventsInput(BaseModel):
     provider: str
     user_id: str
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
+    start: Optional[datetime] = None
+    end: Optional[datetime] = None
     max_results: Optional[int] = 10
+    calendar_id: Optional[str] = None
 
 class ListEventsOutput(BaseModel):
     events: List[EventSchema] = Field(default_factory=list)
@@ -201,8 +296,9 @@ class CreateEventInput(BaseModel):
     attendees: Optional[List[AttendeeSchema]] = Field(default_factory=list)
 
     @field_validator('end')
-    def validate_dates(cls, v, values):
-        if 'start' in values and v <= values['start']:
+    def validate_dates(cls, v, info):
+        data = info.data
+        if 'start' in data and v <= data['start']:
             raise ValueError("End time must be after start time")
         return v
 
@@ -221,8 +317,9 @@ class UpdateEventInput(BaseModel):
     attendees: Optional[List[AttendeeSchema]] = Field(default_factory=list)
 
     @field_validator('end')
-    def validate_dates(cls, v, values):
-        if v and 'start' in values and values['start'] and v <= values['start']:
+    def validate_dates(cls, v, info):
+        data = info.data
+        if v and 'start' in data and data['start'] and v <= data['start']:
             raise ValueError("End time must be after start time")
         return v
 
@@ -245,8 +342,9 @@ class RescheduleEventInput(BaseModel):
     new_end: datetime
 
     @field_validator('new_end')
-    def validate_dates(cls, v, values):
-        if 'new_start' in values and v <= values['new_start']:
+    def validate_dates(cls, v, info):
+        data = info.data
+        if 'new_start' in data and v <= data['new_start']:
             raise ValueError("New end time must be after new start time")
         return v
 
@@ -261,8 +359,9 @@ class CancelEventInput(BaseModel):
     end: datetime
 
     @field_validator('end')
-    def validate_dates(cls, v, values):
-        if 'start' in values and v <= values['start']:
+    def validate_dates(cls, v, info):
+        data = info.data
+        if 'start' in data and v <= data['start']:
             raise ValueError("End time must be after start time")
         return v
 
@@ -270,13 +369,9 @@ class CancelEventOutput(BaseModel):
     success: bool
 
 async def list_events_tool(input: ListEventsInput) -> ListEventsOutput:
-    """List calendar events for a user within a specified time range."""
-    if not input.provider in ("google", "microsoft"):
+    """List calendar events."""
+    if input.provider not in ("google", "microsoft"):
         raise ToolExecutionError(f"Unsupported provider: {input.provider}")
-    
-    # Convert string dates to datetime if needed
-    start = input.start_time or datetime.now()
-    end = input.end_time or (start + timedelta(days=7))
     
     try:
         # Get calendar service for the provider
@@ -284,10 +379,10 @@ async def list_events_tool(input: ListEventsInput) -> ListEventsOutput:
         
         # List events
         events = await calendar_service.list_events(
-            start_time=start,
-            end_time=end,
+            start_time=input.start,
+            end_time=input.end,
             calendar_id=input.calendar_id or "primary",
-            max_results=input.max_results or 10
+            max_results=input.max_results
         )
         
         # Map service events to tool events
@@ -297,82 +392,136 @@ async def list_events_tool(input: ListEventsInput) -> ListEventsOutput:
                 tool_event = _map_service_event_to_tool_event(event)
                 tool_events.append(tool_event)
             except Exception as e:
-                logger.warning(f"Failed to map event: {e}")
-                continue
+                # Log error but continue processing other events
+                logger.error(f"Error mapping event: {e}")
         
         return ListEventsOutput(events=tool_events)
         
+    except ToolExecutionError as e:
+        # Re-raise ToolExecutionError directly
+        raise e
     except Exception as e:
-        error_msg = f"Failed to list events: {str(e)}"
-        logger.error(error_msg)
-        raise ToolExecutionError(error_msg, original_exception=e)
+        # Handle different error types
+        error_msg = str(e)
+        if "User not found" in error_msg:
+            raise ToolExecutionError(f"User not found: {input.user_id}")
+        elif "No credentials" in error_msg or "credentials" in error_msg.lower():
+            raise ToolExecutionError(f"No {input.provider} credentials available for this user")
+        elif isinstance(e, TimeoutError):
+            error_msg = "Connection timed out when listing events. Please try again."
+            logger.error(error_msg)
+            raise ToolExecutionError(error_msg)
+        else:
+            error_msg = f"Failed to list events: {error_msg}"
+            logger.error(error_msg)
+            raise ToolExecutionError(error_msg)
 
 async def find_free_slots_tool(input: FreeSlotsInput) -> FreeSlotsOutput:
-    """Find free time slots for a user within a specified range."""
-    if not input.provider in ("google", "microsoft"):
+    """Find free time slots."""
+    if input.provider not in ("google", "microsoft"):
         raise ToolExecutionError(f"Unsupported provider: {input.provider}")
+    
+    # Validate duration
     if input.duration_minutes <= 0:
         raise ToolExecutionError("Duration must be positive")
-    if input.range_end <= input.range_start:
-        raise ToolExecutionError("End of range must be after start of range")
+    
     try:
+        # Get calendar service for the provider
         calendar_service = await get_calendar_service(input.provider, input.user_id)
+        
+        # Find free slots
         slots = await calendar_service.find_free_slots(
             duration_minutes=input.duration_minutes,
             range_start=input.range_start,
             range_end=input.range_end
         )
+        
+        # Map service slots to tool slots
         tool_slots = []
         for slot in slots:
-            try:
-                tool_slots.append(FreeSlotSchema(**slot))
-            except Exception as e:
-                logger.warning(f"Failed to map slot: {e}")
+            # Handle different formats for time slots
+            start_time = ""
+            end_time = ""
+            
+            if isinstance(slot, dict):
+                # Handle dictionary format
+                start_time = slot.get('start', '')
+                end_time = slot.get('end', '')
+                
+                # Handle nested dateTime objects
+                if isinstance(start_time, dict) and 'dateTime' in start_time:
+                    start_time = start_time['dateTime']
+                if isinstance(end_time, dict) and 'dateTime' in end_time:
+                    end_time = end_time['dateTime']
+            
+            tool_slots.append(FreeSlotSchema(start=start_time, end=end_time))
+        
         return FreeSlotsOutput(slots=tool_slots)
+        
+    except ToolExecutionError as e:
+        # Re-raise ToolExecutionError directly
+        raise e
     except Exception as e:
-        error_msg = f"Failed to find free slots: {str(e)}"
-        logger.error(error_msg)
-        raise ToolExecutionError(error_msg, original_exception=e)
+        # Handle different error types
+        error_msg = str(e)
+        if "User not found" in error_msg:
+            raise ToolExecutionError(f"User not found: {input.user_id}")
+        elif "No credentials" in error_msg or "credentials" in error_msg.lower():
+            raise ToolExecutionError(f"No {input.provider} credentials available for this user")
+        elif isinstance(e, TimeoutError):
+            error_msg = f"Failed to find free slots: Connection timeout"
+            logger.error(error_msg)
+            raise ToolExecutionError(error_msg)
+        else:
+            error_msg = f"Failed to find free slots: {error_msg}"
+            logger.error(error_msg)
+            raise ToolExecutionError(error_msg)
 
 async def create_event_tool(input: CreateEventInput) -> CreateEventOutput:
     """Create a new calendar event."""
-    if not input.provider in ("google", "microsoft"):
+    if input.provider not in ("google", "microsoft"):
         raise ToolExecutionError(f"Unsupported provider: {input.provider}")
     
     # Validate required fields
     if not input.summary:
         raise ToolExecutionError("Event summary is required")
     if not input.start:
-        raise ToolExecutionError("Start time is required")
-    if not input.end and not input.duration_minutes:
-        raise ToolExecutionError("Either end time or duration is required")
+        raise ToolExecutionError("Event start time is required")
+    if not input.end:
+        raise ToolExecutionError("Event end time is required")
+    if input.end <= input.start:
+        raise ToolExecutionError("End time must be after start time")
     
     try:
-        # Calculate end time if duration is provided
-        end_time = input.end
-        if not end_time and input.duration_minutes:
-            end_time = input.start + timedelta(minutes=input.duration_minutes)
-        
-        # Validate end time is after start time
-        if end_time <= input.start:
-            raise ToolExecutionError("End time must be after start time")
-        
         # Get calendar service for the provider
         calendar_service = await get_calendar_service(input.provider, input.user_id)
         
-        # Create event
+        # Prepare event data
         event_data = {
             "summary": input.summary,
-            "start": {"dateTime": input.start.isoformat()},
-            "end": {"dateTime": end_time.isoformat()},
-            "description": input.description,
-            "location": input.location,
-            "attendees": input.attendees or []
+            "start": input.start,
+            "end": input.end
         }
         
+        if input.description:
+            event_data["description"] = input.description
+        if input.location:
+            event_data["location"] = input.location
+        if input.attendees:
+            event_data["attendees"] = [
+                {"email": attendee.email, "name": attendee.name}
+                for attendee in input.attendees
+            ]
+        
+        # Create event
+        # Set default calendar_id to "primary" if not present in the input
+        calendar_id = "primary"
+        if hasattr(input, 'calendar_id') and input.calendar_id:
+            calendar_id = input.calendar_id
+            
         created_event = await calendar_service.create_event(
             event_data=event_data,
-            calendar_id=input.calendar_id or "primary"
+            calendar_id=calendar_id
         )
         
         # Map service event to tool event
@@ -380,10 +529,26 @@ async def create_event_tool(input: CreateEventInput) -> CreateEventOutput:
         
         return CreateEventOutput(event=tool_event)
         
+    except ToolExecutionError as e:
+        # Re-raise ToolExecutionError directly
+        raise e
     except Exception as e:
-        error_msg = f"Failed to create event: {str(e)}"
-        logger.error(error_msg)
-        raise ToolExecutionError(error_msg, original_exception=e)
+        # Handle different error types
+        error_msg = str(e)
+        if "User not found" in error_msg:
+            raise ToolExecutionError(f"User not found: {input.user_id}")
+        elif "No credentials" in error_msg or "credentials" in error_msg.lower():
+            raise ToolExecutionError(f"No {input.provider} credentials available for this user")
+        elif "conflict" in error_msg.lower() or "409" in error_msg:
+            raise ToolExecutionError(f"Event conflicts with an existing event")
+        elif isinstance(e, TimeoutError):
+            error_msg = "Connection timed out when creating event. Please try again."
+            logger.error(error_msg)
+            raise ToolExecutionError(error_msg)
+        else:
+            error_msg = f"Failed to create event: {error_msg}"
+            logger.error(error_msg)
+            raise ToolExecutionError(error_msg)
 
 async def delete_event_tool(input: DeleteEventInput) -> DeleteEventOutput:
     if not input.provider in ("google", "microsoft"):
@@ -393,53 +558,134 @@ async def delete_event_tool(input: DeleteEventInput) -> DeleteEventOutput:
 
 async def reschedule_event_tool(input: RescheduleEventInput) -> RescheduleEventOutput:
     """Reschedule an existing calendar event."""
-    if not input.provider in ("google", "microsoft"):
+    if input.provider not in ("google", "microsoft"):
         raise ToolExecutionError(f"Unsupported provider: {input.provider}")
+    
+    # Validate required fields
     if not input.event_id:
         raise ToolExecutionError("Event ID is required")
+    if not input.new_start:
+        raise ToolExecutionError("New start time is required")
+    if not input.new_end:
+        raise ToolExecutionError("New end time is required")
     if input.new_end <= input.new_start:
-        raise ToolExecutionError("New end time must be after new start time")
+        raise ToolExecutionError("End time must be after start time")
+    
     try:
+        # Get calendar service for the provider
         calendar_service = await get_calendar_service(input.provider, input.user_id)
-        updated_event = await calendar_service.reschedule_event(
+        
+        # Prepare update data with new times
+        update_data = {
+            "start": input.new_start,
+            "end": input.new_end,
+            "summary": "Rescheduled Event",  # Add summary for Google
+            "subject": "Rescheduled Event"   # Add subject for Microsoft
+        }
+        
+        # Set default calendar_id
+        calendar_id = "primary"
+        # Try to get calendar_id from input if it exists
+        try:
+            if hasattr(input, 'calendar_id') and input.calendar_id:
+                calendar_id = input.calendar_id
+        except (AttributeError, Exception):
+            # If calendar_id is not available, use default
+            pass
+        
+        # Update event with new times
+        updated_event = await calendar_service.update_event(
             event_id=input.event_id,
-            new_start=input.new_start,
-            new_end=input.new_end,
-            calendar_id=getattr(input, 'calendar_id', 'primary')
+            event_data=update_data,
+            calendar_id=calendar_id
         )
+        
+        # Map service event to tool event
         tool_event = _map_service_event_to_tool_event(updated_event)
+        
         return RescheduleEventOutput(event=tool_event)
+        
+    except ToolExecutionError as e:
+        # Re-raise ToolExecutionError directly
+        raise e
     except Exception as e:
-        error_msg = f"Failed to reschedule event: {str(e)}"
-        logger.error(error_msg)
-        raise ToolExecutionError(error_msg, original_exception=e)
+        # Handle different error types
+        error_msg = str(e)
+        if "User not found" in error_msg:
+            raise ToolExecutionError(f"User not found: {input.user_id}")
+        elif "No credentials" in error_msg or "credentials" in error_msg.lower():
+            raise ToolExecutionError(f"No {input.provider} credentials available for this user")
+        elif "not found" in error_msg.lower() or "404" in error_msg:
+            raise ToolExecutionError(f"Event {input.event_id} not found")
+        elif "conflict" in error_msg.lower() or "409" in error_msg:
+            raise ToolExecutionError(f"Event conflicts with an existing event")
+        elif isinstance(e, TimeoutError):
+            error_msg = "Connection timed out when rescheduling event. Please try again."
+            logger.error(error_msg)
+            raise ToolExecutionError(error_msg)
+        else:
+            error_msg = f"Failed to reschedule event: {error_msg}"
+            logger.error(error_msg)
+            raise ToolExecutionError(error_msg)
 
 async def cancel_event_tool(input: CancelEventInput) -> CancelEventOutput:
-    """Cancel a calendar event."""
-    if not input.provider in ("google", "microsoft"):
+    """Cancel an existing calendar event."""
+    if input.provider not in ("google", "microsoft"):
         raise ToolExecutionError(f"Unsupported provider: {input.provider}")
+    
+    # Validate required fields
     if not input.event_id:
         raise ToolExecutionError("Event ID is required")
-    if input.end <= input.start:
-        raise ToolExecutionError("End time must be after start time")
+    
     try:
+        # Get calendar service for the provider
         calendar_service = await get_calendar_service(input.provider, input.user_id)
-        success = await calendar_service.cancel_event(
+        
+        # Set default calendar_id
+        calendar_id = "primary"
+        # Try to get calendar_id from input if it exists
+        try:
+            if hasattr(input, 'calendar_id') and input.calendar_id:
+                calendar_id = input.calendar_id
+        except (AttributeError, Exception):
+            # If calendar_id is not available, use default
+            pass
+        
+        # Cancel event
+        await calendar_service.cancel_event(
             event_id=input.event_id,
             start=input.start,
             end=input.end,
-            calendar_id=getattr(input, 'calendar_id', 'primary')
+            calendar_id=calendar_id
         )
-        return CancelEventOutput(success=success)
+        
+        return CancelEventOutput(success=True)
+        
+    except ToolExecutionError as e:
+        # Re-raise ToolExecutionError directly
+        raise e
     except Exception as e:
-        error_msg = f"Failed to cancel event: {str(e)}"
-        logger.error(error_msg)
-        raise ToolExecutionError(error_msg, original_exception=e)
+        # Handle different error types
+        error_msg = str(e)
+        if "User not found" in error_msg:
+            raise ToolExecutionError(f"User not found: {input.user_id}")
+        elif "No credentials" in error_msg or "credentials" in error_msg.lower():
+            raise ToolExecutionError(f"No {input.provider} credentials available for this user")
+        elif "not found" in error_msg.lower() or "404" in error_msg:
+            raise ToolExecutionError(f"Event {input.event_id} not found")
+        elif isinstance(e, TimeoutError):
+            error_msg = "Connection timed out when canceling event. Please try again."
+            logger.error(error_msg)
+            raise ToolExecutionError(error_msg)
+        else:
+            error_msg = f"Failed to cancel event: {error_msg}"
+            logger.error(error_msg)
+            raise ToolExecutionError(error_msg)
 
 class TestListEventsTool:
     def test_google_success(self):
         now = datetime.utcnow().isoformat()
-        input = ListEventsInput(provider="google", user_id="u1", start_time=now, end_time=(datetime.utcnow() + timedelta(hours=1)).isoformat())
+        input = ListEventsInput(provider="google", user_id="u1", start=now, end=(datetime.utcnow() + timedelta(hours=1)).isoformat())
         output = list_events_tool(input)
         assert isinstance(output, ListEventsOutput)
         assert len(output.events) == 1
@@ -447,7 +693,7 @@ class TestListEventsTool:
 
     def test_microsoft_success(self):
         now = datetime.utcnow().isoformat()
-        input = ListEventsInput(provider="microsoft", user_id="u1", start_time=now, end_time=(datetime.utcnow() + timedelta(hours=1)).isoformat())
+        input = ListEventsInput(provider="microsoft", user_id="u1", start=now, end=(datetime.utcnow() + timedelta(hours=1)).isoformat())
         output = list_events_tool(input)
         assert isinstance(output, ListEventsOutput)
         assert len(output.events) == 1
@@ -455,6 +701,6 @@ class TestListEventsTool:
 
     def test_unknown_provider(self):
         now = datetime.utcnow().isoformat()
-        input = ListEventsInput(provider="other", user_id="u1", start_time=now, end_time=(datetime.utcnow() + timedelta(hours=1)).isoformat())
+        input = ListEventsInput(provider="other", user_id="u1", start=now, end=(datetime.utcnow() + timedelta(hours=1)).isoformat())
         with pytest.raises(ToolExecutionError):
             list_events_tool(input) 

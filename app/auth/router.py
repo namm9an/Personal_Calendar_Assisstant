@@ -4,6 +4,7 @@ Authentication router for the Personal Calendar Assistant.
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
+import os
 
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -35,6 +36,8 @@ oauth.register(
     client_kwargs={"scope": settings.GOOGLE_AUTH_SCOPES},
 )
 
+# Use environment variable for token key
+ACCESS_TOKEN_KEY = os.getenv("ACCESS_TOKEN_KEY", "access_token")
 
 @router.get("/google/login")
 async def login_via_google(request: Request):
@@ -124,7 +127,7 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
         # Set token in cookie and redirect to frontend
         response = RedirectResponse(url="/")
         response.set_cookie(
-            key="access_token",
+            key=ACCESS_TOKEN_KEY,
             value=f"Bearer {access_token}",
             httponly=True,
             secure=settings.ENVIRONMENT != "development",
@@ -203,7 +206,7 @@ async def logout():
     Logout user by clearing cookies.
     """
     response = JSONResponse(content={"message": "Successfully logged out"})
-    response.delete_cookie(key="access_token")
+    response.delete_cookie(key=ACCESS_TOKEN_KEY)
     return response
 
 

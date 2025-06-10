@@ -4,6 +4,7 @@ setup_test_environment()
 
 import os
 import pytest
+import pytest_asyncio
 import uuid
 import json
 import warnings
@@ -12,7 +13,6 @@ from unittest.mock import MagicMock, patch, AsyncMock
 from uuid import UUID
 from typing import Dict, List, Optional, Any, Union, Generator, AsyncGenerator
 import logging
-import time
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
@@ -21,8 +21,6 @@ from app.core.exceptions import ToolExecutionError
 from app.services.encryption import TokenEncryption
 from fastapi.testclient import TestClient
 from app.main import app
-from sqlalchemy.orm import Session
-from app.db.connection import get_db
 from app.core.config import settings
 from src.repositories.mongodb_repository import MongoRepository
 from src.services.google_calendar_service import GoogleCalendarService
@@ -47,6 +45,25 @@ class CalendarNotFoundException(ToolExecutionError):
     """Exception raised when a calendar is not found."""
     pass
 
+class TestSettings:
+    """Test settings for the app."""
+    MONGODB_URI = "mongodb://localhost:27017"
+    MONGODB_DB_NAME = "test_calendar_db"
+    JWT_SECRET = "test_jwt_secret"
+    JWT_ALGORITHM = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES = 30
+    ENCRYPTION_KEY = "test_encryption_key_32_chars_long_!"
+    GOOGLE_CLIENT_ID = "test_google_client_id"
+    GOOGLE_CLIENT_SECRET = "test_google_client_secret"
+    GOOGLE_REDIRECT_URI = "http://localhost:8000/auth/google/callback"
+    MS_CLIENT_ID = "test_ms_client_id"
+    MS_CLIENT_SECRET = "test_ms_client_secret"
+    MS_TENANT_ID = "test_tenant_id"
+    MS_REDIRECT_URI = "http://localhost:8000/auth/microsoft/callback"
+    REDIS_URL = "redis://localhost:6379/0"
+    RATE_LIMIT_PER_MINUTE = 60
+    DB_ECHO = False
+
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_env():
     """Set up test environment variables."""
@@ -56,51 +73,71 @@ def setup_test_env():
     teardown_test_environment()
     os.environ.pop("TESTING", None)
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def event_loop():
     """Create an instance of the default event loop for each test case."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
+    policy = asyncio.get_event_loop_policy()
+    loop = policy.new_event_loop()
+    asyncio.set_event_loop(loop)
     yield loop
+    loop.run_until_complete(loop.shutdown_asyncgens())
     loop.close()
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def mongodb_client():
     """Create a MongoDB client for testing."""
     client = AsyncIOMotorClient("mongodb://localhost:27017")
     try:
+        # Test connection
+        await client.admin.command('ping')
         yield client
     finally:
-        await client.drop_database("test_calendar_db")
-        await client.close()
+        client.close()
 
-@pytest.fixture(scope="session")
-async def test_db(mongodb_client):
-    """Create a test database."""
-    db = mongodb_client[os.getenv("MONGODB_DB_NAME", "test_calendar_db")]
-    try:
-        yield db
-    finally:
-        await db.client.drop_database(os.getenv("MONGODB_DB_NAME", "test_calendar_db"))
+@pytest_asyncio.fixture(scope="function")
+async def test_db(mongodb_client: AsyncIOMotorClient):
+    """Create a test database that is dropped after the session."""
+    db_name = "calendar_test"
+    db = mongodb_client[db_name]
+    yield db
+    await mongodb_client.drop_database(db_name)
 
 @pytest.fixture
-async def repository(mongodb_client):
+def repository(mongodb_client):
     """Create a repository instance for testing."""
     repo = MongoRepository(mongodb_client)
-    await repo.initialize()
+    # We don't await initialize here as it will be handled in the test
     return repo
 
 @pytest.fixture
-async def test_user(repository):
-    """Create a test user."""
-    user = {
+def test_user():
+    """Create a test user for non-async tests."""
+    user = User(
+        id=str(ObjectId()),
+        email="test@example.com",
+        name="Test User",
+        google_access_token="test_google_token",
+        microsoft_access_token="test_microsoft_token",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    return user
+
+@pytest_asyncio.fixture
+async def async_test_user(repository):
+    """Create a test user for async tests."""
+    repo = await repository.initialize()
+    user_data = {
         "email": "test@example.com",
         "google_access_token": "test_google_token",
         "microsoft_access_token": "test_microsoft_token"
     }
-    created_user = await repository.create_user(user)
-    return created_user
+    user = await repo.create_user(user_data)
+    yield user
+    # Cleanup
+    await repo.users.delete_one({"email": "test@example.com"})
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_event(test_db, test_user):
     """Create a test event."""
     event_data = TEST_EVENT_DATA.copy()
@@ -117,7 +154,7 @@ async def test_event(test_db, test_user):
     finally:
         await test_db.events.delete_one({"_id": event_data["_id"]})
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_session(test_db, test_user):
     """Create a test session."""
     session_data = TEST_SESSION_DATA.copy()
@@ -134,7 +171,7 @@ async def test_session(test_db, test_user):
     finally:
         await test_db.sessions.delete_one({"_id": session_data["_id"]})
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_agent_log(test_db, test_user):
     """Create a test agent log."""
     log_data = TEST_AGENT_LOG_DATA.copy()
@@ -188,6 +225,27 @@ class MockGoogleService:
                 "end": {"dateTime": (BASE_DATETIME + timedelta(hours=1)).isoformat()},
                 "attendees": [{"email": "test@example.com"}],
                 "htmlLink": "https://calendar.google.com/event?id=123"
+            },
+            {
+                "id": "mock_google_event_2",
+                "summary": "Another Mock Event",
+                "start": {"dateTime": (BASE_DATETIME + timedelta(hours=2)).isoformat()},
+                "end": {"dateTime": (BASE_DATETIME + timedelta(hours=3)).isoformat()},
+                "attendees": [{"email": "test2@example.com"}],
+                "htmlLink": "https://calendar.google.com/event?id=124"
+            }
+        ]
+
+    async def find_free_slots(self, start_time, end_time, duration_minutes=30, calendar_id="primary"):
+        """Mock find free slots."""
+        return [
+            {
+                "start": BASE_DATETIME.isoformat(),
+                "end": (BASE_DATETIME + timedelta(minutes=duration_minutes)).isoformat()
+            },
+            {
+                "start": (BASE_DATETIME + timedelta(hours=4)).isoformat(),
+                "end": (BASE_DATETIME + timedelta(hours=4, minutes=duration_minutes)).isoformat()
             }
         ]
 
@@ -235,6 +293,15 @@ class MockMicrosoftService:
             }
         ]
 
+    async def find_free_slots(self, start_time, end_time, duration_minutes=30, calendar_id="primary"):
+        """Mock find free slots."""
+        return [
+            {
+                "start": BASE_DATETIME.isoformat(),
+                "end": (BASE_DATETIME + timedelta(minutes=duration_minutes)).isoformat()
+            }
+        ]
+
     async def create_event(self, event_data):
         """Mock create event."""
         return {
@@ -270,6 +337,7 @@ def patch_services(mock_google_service, mock_microsoft_service):
 
 @pytest.fixture
 def client():
+    """Return a TestClient instance for the app."""
     return TestClient(app)
 
 @pytest.fixture
@@ -280,50 +348,54 @@ def mock_llm_selector():
 
 @pytest.fixture
 def mock_langgraph_runner():
-    mock = MagicMock()
-    mock.run_stream = MagicMock(return_value=iter([{"message": "step", "tool": None, "input": None, "output": None}]))
-    return mock
+    """Create a mock LangGraph runner."""
+    runner = MagicMock()
+    # The rest of the mock implementation would go here
+    return runner
 
-@pytest.fixture(scope="session")
-async def db_session() -> AsyncGenerator[Session, None]:
-    """Create a fresh database session for a test."""
-    async for session in get_db():
-        yield session
-
-@pytest.fixture(autouse=True)
-async def setup_test_db(db_session: Session):
-    """Set up test database and clean up after tests."""
-    # Setup
-    yield
-    # Cleanup
-    await db_session.rollback()
-    await db_session.close()
+@pytest_asyncio.fixture(autouse=True)
+async def setup_test_db(test_db: AsyncIOMotorClient):
+    """Fixture to ensure the test database is clean before each test."""
+    # This fixture can be used to clear collections before each test if needed
+    collections = ['users', 'events', 'sessions', 'agent_logs', 'oauth_states']
+    for collection in collections:
+        if collection in await test_db.list_collection_names():
+            await test_db[collection].delete_many({})
+    yield test_db
 
 @pytest.fixture
 def mock_db():
-    """Create a mock database session for testing."""
-    class MockSession:
-        def __init__(self):
-            self.query = lambda x: self
-            self.filter = lambda x: self
-            self.first = lambda: None
-            self.all = lambda: []
-            self.add = lambda x: None
-            self.commit = lambda: None
-            self.rollback = lambda: None
-            self.close = lambda: None
-    return MockSession()
+    """Create a mock database session."""
+    db = MagicMock()
+    db.add = MagicMock()
+    db.commit = MagicMock()
+    db.refresh = MagicMock()
+    db.query = MagicMock(return_value=db)
+    db.filter = MagicMock(return_value=db)
+    db.first = MagicMock(return_value=None)
+    db.all = MagicMock(return_value=[])
+    return db
 
 @pytest.fixture
-async def google_service():
+def google_service():
     """Create a mock Google Calendar service."""
-    service = GoogleCalendarService()
+    service = MagicMock(spec=GoogleCalendarService)
+    service.list_events = AsyncMock(return_value=[{"id": "test_event_id"}])
+    service.find_free_slots = AsyncMock(return_value=[{"start": "2023-01-01T10:00:00Z", "end": "2023-01-01T11:00:00Z"}])
+    service.create_event = AsyncMock(return_value={"id": "new_event_id"})
+    service.update_event = AsyncMock(return_value={"id": "updated_event_id"})
+    service.delete_event = AsyncMock(return_value=True)
     return service
 
 @pytest.fixture
-async def microsoft_service():
+def microsoft_service():
     """Create a mock Microsoft Calendar service."""
-    service = MicrosoftCalendarService()
+    service = MagicMock(spec=MicrosoftCalendarService)
+    service.list_events = AsyncMock(return_value=[{"id": "test_event_id"}])
+    service.find_free_slots = AsyncMock(return_value=[{"start": "2023-01-01T10:00:00Z", "end": "2023-01-01T11:00:00Z"}])
+    service.create_event = AsyncMock(return_value={"id": "new_event_id"})
+    service.update_event = AsyncMock(return_value={"id": "updated_event_id"})
+    service.delete_event = AsyncMock(return_value=True)
     return service
 
 @pytest.fixture

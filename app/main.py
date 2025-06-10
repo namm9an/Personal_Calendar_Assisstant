@@ -3,6 +3,7 @@ Main application module for Personal Calendar Assistant.
 """
 import logging
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +12,7 @@ from redis import Redis
 
 from app.api.router import router as api_router
 from app.auth.router import router as auth_router
+from src.api.agent_calendar import router as agent_router
 from app.config import get_settings
 from app.db.mongodb import mongodb
 from app.db.init_db import init_db
@@ -57,6 +59,9 @@ def create_application() -> FastAPI:
     """
     settings = get_settings()
     
+    # Conditionally set lifespan manager
+    app_lifespan = lifespan if os.getenv("TESTING") != "true" else None
+    
     app = FastAPI(
         title=settings.APP_NAME,
         description="An LLM-driven scheduling agent for calendar management",
@@ -65,7 +70,7 @@ def create_application() -> FastAPI:
         redoc_url="/redoc",
         openapi_url="/openapi.json",
         debug=settings.DEBUG,
-        lifespan=lifespan,
+        lifespan=app_lifespan,
     )
     
     # Set up CORS middleware
@@ -136,6 +141,9 @@ def create_application() -> FastAPI:
     # Include API routers
     app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
     app.include_router(api_router, prefix=settings.API_PREFIX, tags=["API"])
+    
+    # The agent_router already has the prefix "/agent" defined in it, so we don't add it here
+    app.include_router(agent_router, tags=["Agent"])
     
     return app
 

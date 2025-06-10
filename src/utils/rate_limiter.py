@@ -23,15 +23,20 @@ def rate_limit(limit: int = 60, window: int = 60):
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # Get request object from kwargs
-            request = kwargs.get('request')
-            if not request:
-                for arg in args:
-                    if isinstance(arg, Request):
-                        request = arg
-                        break
+            # Find the request object in args or kwargs
+            request = None
+            for arg in args:
+                if isinstance(arg, Request):
+                    request = arg
+                    break
             
             if not request:
+                # Look in kwargs for the request
+                request = kwargs.get('request')
+            
+            # If we still don't have a valid FastAPI Request, skip rate limiting
+            if not request or not isinstance(request, Request):
+                # For testing or other non-API calls, just call the function
                 return await func(*args, **kwargs)
             
             # Get client IP

@@ -9,11 +9,10 @@ import certifi
 
 import msal
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
-from msal import ConfidentialClientApplication
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.config import get_settings
-from app.models.user import User
+from app.models.mongodb_models import User
 from app.services.encryption import TokenEncryption
 from app.core.exceptions import OAuthError
 
@@ -26,14 +25,16 @@ os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 class MicrosoftOAuthService:
     """Service for handling Microsoft OAuth authentication and token management."""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncIOMotorDatabase, user: Optional[User] = None):
         """
         Initialize the Microsoft OAuth service.
         
         Args:
-            db: Database session
+            db: MongoDB database
+            user: User object (optional)
         """
         self.db = db
+        self.user = user
         self.client_id = settings.MS_CLIENT_ID
         self.client_secret = settings.MS_CLIENT_SECRET
         self.tenant_id = settings.MS_TENANT_ID
@@ -121,7 +122,7 @@ class MicrosoftOAuthService:
             logger.error(f"Error exchanging code for token: {str(e)}")
             raise OAuthError(f"Failed to exchange code for token: {str(e)}")
     
-    def save_user_tokens(self, user_id: str, token_data: Dict) -> User:
+    async def save_user_tokens(self, user_id: str, token_data: Dict) -> User:
         """
         Save Microsoft OAuth tokens for a user with encryption.
         
@@ -136,8 +137,9 @@ class MicrosoftOAuthService:
             OAuthError: If user not found or token saving fails
         """
         try:
-            user = self.db.query(User).filter(User.id == user_id).first()
-            if not user:
+            # Find user in MongoDB
+            user_doc = await self.db.users.find_one({"_id": user_id})
+            if not user_doc:
                 logger.error(f"User not found: {user_id}")
                 raise OAuthError("User not found")
                 
@@ -153,26 +155,43 @@ class MicrosoftOAuthService:
             expiry_time = datetime.utcnow() + timedelta(seconds=expires_in)
             
             # Encrypt tokens before storing
-            user.microsoft_access_token = self.encryption_service.encrypt(access_token)
-            user.microsoft_refresh_token = self.encryption_service.encrypt(refresh_token)
-            user.microsoft_token_expiry = expiry_time
+            encrypted_access_token = self.encryption_service.encrypt(access_token)
+            encrypted_refresh_token = self.encryption_service.encrypt(refresh_token)
             
             # Extract Microsoft user ID (object ID) from claims
+            ms_id = None
             if "id_token_claims" in token_data:
                 ms_id = token_data["id_token_claims"].get("oid")  # Object ID
-                if ms_id:
-                    user.microsoft_id = ms_id
-                    
-            # Commit changes
-            self.db.commit()
-            self.db.refresh(user)
-            return user
+            
+            # Update user document
+            update_data = {
+                "microsoft_access_token": encrypted_access_token,
+                "microsoft_refresh_token": encrypted_refresh_token,
+                "microsoft_token_expiry": expiry_time,
+                "updated_at": datetime.utcnow()
+            }
+            
+            if ms_id:
+                update_data["microsoft_id"] = ms_id
+                
+            # Update in MongoDB
+            result = await self.db.users.update_one(
+                {"_id": user_id},
+                {"$set": update_data}
+            )
+            
+            if result.modified_count == 0:
+                logger.warning(f"No changes made to user {user_id}")
+            
+            # Get updated user
+            updated_user_doc = await self.db.users.find_one({"_id": user_id})
+            return User(**updated_user_doc)
+            
         except Exception as e:
-            self.db.rollback()
             logger.error(f"Error saving Microsoft tokens for user {user_id}: {str(e)}")
             raise OAuthError(f"Failed to save Microsoft tokens: {str(e)}")
     
-    def get_tokens(self, user_id: str) -> Tuple[str, str, datetime]:
+    async def get_tokens(self, user_id: str) -> Tuple[str, str, datetime]:
         """
         Get Microsoft OAuth tokens for a user, refreshing if needed.
         
@@ -186,11 +205,14 @@ class MicrosoftOAuthService:
             OAuthError: If user not found or has no Microsoft credentials
         """
         try:
-            user = self.db.query(User).filter(User.id == user_id).first()
-            if not user:
+            # Find user in MongoDB
+            user_doc = await self.db.users.find_one({"_id": user_id})
+            if not user_doc:
                 logger.error(f"User not found: {user_id}")
                 raise OAuthError("User not found")
-                
+            
+            user = User(**user_doc)
+            
             if not user.microsoft_access_token or not user.microsoft_refresh_token:
                 logger.error(f"User {user_id} has no Microsoft credentials")
                 raise OAuthError("No Microsoft credentials found for user")
@@ -225,19 +247,28 @@ class MicrosoftOAuthService:
                 expiry_time = datetime.utcnow() + timedelta(seconds=expires_in)
                 
                 # Save updated tokens
-                user.microsoft_access_token = self.encryption_service.encrypt(access_token)
-                user.microsoft_refresh_token = self.encryption_service.encrypt(refresh_token)
-                user.microsoft_token_expiry = expiry_time
+                encrypted_access_token = self.encryption_service.encrypt(access_token)
+                encrypted_refresh_token = self.encryption_service.encrypt(refresh_token)
                 
-                self.db.commit()
-                self.db.refresh(user)
+                # Update in MongoDB
+                await self.db.users.update_one(
+                    {"_id": user_id},
+                    {"$set": {
+                        "microsoft_access_token": encrypted_access_token,
+                        "microsoft_refresh_token": encrypted_refresh_token,
+                        "microsoft_token_expiry": expiry_time,
+                        "updated_at": datetime.utcnow()
+                    }}
+                )
+                
+                return access_token, refresh_token, expiry_time
             
             return access_token, refresh_token, user.microsoft_token_expiry
         except Exception as e:
             logger.error(f"Error getting Microsoft tokens for user {user_id}: {str(e)}")
             raise OAuthError(f"Failed to get Microsoft tokens: {str(e)}")
     
-    def save_state(self, state: str, user_id: str) -> None:
+    async def save_state(self, state: str, user_id: str) -> None:
         """
         Save OAuth state parameter for CSRF protection.
         
@@ -248,12 +279,23 @@ class MicrosoftOAuthService:
         # In a real implementation, this would save to a secure store
         # For testing, we'll just store in memory
         if os.getenv('TESTING', '').lower() == 'true':
-            self._test_states = getattr(self, '_test_states', {})
-            self._test_states[state] = user_id
+            from app.services.oauth_service import oauth_states
+            oauth_states[state] = {
+                "user_id": user_id,
+                "expires": datetime.utcnow() + timedelta(minutes=10)
+            }
+        else:
+            # In production, save to database
+            await self.db.oauth_states.insert_one({
+                "state": state,
+                "user_id": user_id,
+                "created_at": datetime.utcnow(),
+                "expires": datetime.utcnow() + timedelta(minutes=10)
+            })
     
-    def validate_state(self, state: str) -> str:
+    async def validate_state(self, state: str) -> str:
         """
-        Validate OAuth state parameter.
+        Validate OAuth state parameter and return associated user ID.
         
         Args:
             state: State parameter to validate
@@ -262,18 +304,38 @@ class MicrosoftOAuthService:
             User ID associated with the state
             
         Raises:
-            OAuthError: If state is invalid
+            OAuthError: If state is invalid or expired
         """
         if os.getenv('TESTING', '').lower() == 'true':
-            self._test_states = getattr(self, '_test_states', {})
-            if state not in self._test_states:
-                raise OAuthError("Invalid state parameter")
-            return self._test_states.pop(state)
+            from app.services.oauth_service import oauth_states
+            state_data = oauth_states.get(state)
+            if not state_data:
+                raise OAuthError("Invalid OAuth state")
+            
+            if state_data["expires"] < datetime.utcnow():
+                oauth_states.pop(state, None)
+                raise OAuthError("OAuth state expired")
+            
+            # Remove state after use
+            user_id = state_data["user_id"]
+            oauth_states.pop(state, None)
+            return user_id
         else:
-            # In a real implementation, this would validate against a secure store
-            raise NotImplementedError("State validation not implemented for production")
+            # In production, validate from database
+            state_doc = await self.db.oauth_states.find_one({"state": state})
+            if not state_doc:
+                raise OAuthError("Invalid OAuth state")
+            
+            if state_doc["expires"] < datetime.utcnow():
+                await self.db.oauth_states.delete_one({"state": state})
+                raise OAuthError("OAuth state expired")
+            
+            # Remove state after use
+            user_id = state_doc["user_id"]
+            await self.db.oauth_states.delete_one({"state": state})
+            return user_id
     
-    def get_token(self, code: str, user_id: str) -> dict:
+    async def get_token(self, code: str, user_id: str) -> dict:
         """
         Get Microsoft OAuth token for a user.
         
@@ -292,7 +354,7 @@ class MicrosoftOAuthService:
             token_data = self.exchange_code_for_token(code)
             
             # Save tokens for user
-            self.save_user_tokens(user_id, token_data)
+            await self.save_user_tokens(user_id, token_data)
             
             return token_data
         except Exception as e:

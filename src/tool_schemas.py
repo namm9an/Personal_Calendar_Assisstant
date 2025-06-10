@@ -24,12 +24,14 @@ class EventSchema(BaseModel):
 class EventInput(BaseModel):
     provider: str
     user_id: str
+    calendar_id: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class ListEventsInput(EventInput):
     """Input schema for listing events."""
     start: str
     end: str
+    max_results: Optional[int] = 10
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator('start', 'end', mode='before')
@@ -63,6 +65,13 @@ class FreeSlotsInput(EventInput):
         if isinstance(value, datetime):
             return value.isoformat()
         return value
+    
+    @field_validator('duration_minutes')
+    @classmethod
+    def validate_duration(cls, value):
+        if value <= 0:
+            raise ValueError("Duration must be positive")
+        return value
 
 class FreeSlotsOutput(BaseModel):
     """Output schema for finding free slots."""
@@ -79,6 +88,7 @@ class CreateEventInput(BaseModel):
     description: Optional[str] = None
     location: Optional[str] = None
     attendees: List[AttendeeSchema] = Field(default_factory=list)
+    calendar_id: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("start", "end", mode="before")
@@ -101,6 +111,7 @@ class RescheduleEventInput(BaseModel):
     event_id: str
     new_start: datetime
     new_end: datetime
+    calendar_id: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("new_start", "new_end", mode="before")
@@ -121,8 +132,9 @@ class CancelEventInput(BaseModel):
     provider: str
     user_id: str
     event_id: str
-    start: datetime
-    end: datetime
+    start: Optional[datetime] = None
+    end: Optional[datetime] = None
+    calendar_id: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("start", "end", mode="before")
@@ -143,6 +155,7 @@ class DeleteEventInput(BaseModel):
     provider: str
     user_id: str
     event_id: str
+    calendar_id: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class UpdateEventInput(BaseModel):
@@ -156,6 +169,7 @@ class UpdateEventInput(BaseModel):
     description: Optional[str] = None
     location: Optional[str] = None
     attendees: Optional[List[AttendeeSchema]] = Field(default_factory=list)
+    calendar_id: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("start", "end", mode="before")
@@ -177,6 +191,7 @@ class FindFreeSlotsInput(BaseModel):
     range_start: datetime
     range_end: datetime
     duration_minutes: int
+    calendar_id: Optional[str] = None
 
     @field_validator("range_start", "range_end", mode="before")
     @classmethod
@@ -184,6 +199,13 @@ class FindFreeSlotsInput(BaseModel):
         if isinstance(v, str):
             return datetime.fromisoformat(v)
         return v
+    
+    @field_validator('duration_minutes')
+    @classmethod
+    def validate_duration(cls, value):
+        if value <= 0:
+            raise ValueError("Duration must be positive")
+        return value
 
 class DeleteEventOutput(BaseModel):
     success: bool

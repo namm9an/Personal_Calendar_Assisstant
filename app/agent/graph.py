@@ -5,6 +5,7 @@ import json
 import logging
 from datetime import datetime
 from typing import Annotated, Any, Dict, List, Optional, Sequence, TypedDict
+import os
 
 from langchain.agents import AgentExecutor, create_openai_functions_agent
 from langchain.agents.output_parsers.openai_functions import (
@@ -38,6 +39,9 @@ from app.services.google_calendar import GoogleCalendarService
 
 logger = logging.getLogger(__name__)
 
+# Replace hardcoded keys with environment variables
+CHAT_HISTORY_KEY = os.getenv("CHAT_HISTORY_KEY", "chat_history")
+INPUT_KEY = os.getenv("INPUT_KEY", "input")
 
 class AgentState(TypedDict):
     """State for the agent graph."""
@@ -83,8 +87,8 @@ def initialize_agent(user: User, db: Session, gemini_api_key: str):
     # Initialize memory
     memory = ConversationBufferMemory(
         return_messages=True,
-        memory_key="chat_history",
-        input_key="input",
+        memory_key=CHAT_HISTORY_KEY,
+        input_key=INPUT_KEY,
     )
     
     # Initialize LLM

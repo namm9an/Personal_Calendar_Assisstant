@@ -33,6 +33,16 @@ class User(MongoBaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool = True
     preferences: Dict[str, Any] = Field(default_factory=dict)
+    
+    # OAuth credentials
+    google_id: Optional[str] = None
+    google_access_token: Optional[str] = None
+    google_refresh_token: Optional[str] = None
+    google_token_expiry: Optional[datetime] = None
+    microsoft_id: Optional[str] = None
+    microsoft_access_token: Optional[str] = None
+    microsoft_refresh_token: Optional[str] = None
+    microsoft_token_expiry: Optional[datetime] = None
 
 class Event(MongoBaseModel):
     """Event model for MongoDB."""

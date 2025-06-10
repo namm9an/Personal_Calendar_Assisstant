@@ -17,7 +17,7 @@ def mock_token_encryption():
 @pytest.fixture
 def google_oauth_service(mock_token_encryption, test_db):
     """Create a Google OAuth service with mocked dependencies."""
-    with patch("app.services.google_oauth.TokenEncryption", return_value=mock_token_encryption):
+    with patch("app.services.encryption.TokenEncryption", return_value=mock_token_encryption):
         with patch("app.services.google_oauth.settings") as mock_settings:
             mock_settings.google_client_id = "test-client-id"
             mock_settings.google_client_secret = "test-client-secret"

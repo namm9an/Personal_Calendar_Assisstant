@@ -14,27 +14,14 @@ settings = get_settings()
 class TokenEncryption:
     """Service for encrypting and decrypting OAuth tokens."""
     
-    _instance = None
-    
-    def __new__(cls):
-        """Singleton pattern to ensure only one instance exists."""
-        if cls._instance is None:
-            cls._instance = super(TokenEncryption, cls).__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-    
-    def __init__(self):
-        """Initialize encryption service with the Fernet key from settings."""
-        if self._initialized:
-            return
-            
-        # Use test key in test environment
-        if os.getenv('TESTING', '').lower() == 'true':
+    def __init__(self, key: Optional[str] = None):
+        """Initialize encryption service with the Fernet key."""
+        if key:
+            self.fernet = Fernet(key.encode())
+        elif os.getenv('TESTING', '').lower() == 'true':
             self.fernet = Fernet(b'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=')
         else:
             self.fernet = Fernet(settings.TOKEN_ENCRYPTION_KEY.encode())
-            
-        self._initialized = True
     
     def encrypt(self, token: str) -> str:
         """

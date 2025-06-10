@@ -71,8 +71,8 @@ class FreeSlotsInput(BaseModel):
             v = v.isoformat()
         try:
             v_dt = datetime.fromisoformat(v)
-            if 'range_start' in values:
-                start = values['range_start']
+            if hasattr(values, 'data') and 'range_start' in values.data:
+                start = values.data['range_start']
                 if isinstance(start, datetime):
                     start = start.isoformat()
                 start_dt = datetime.fromisoformat(start)
@@ -132,8 +132,8 @@ class CreateEventInput(BaseModel):
             v = v.isoformat()
         try:
             v_dt = datetime.fromisoformat(v)
-            if 'start' in values:
-                start = values['start']
+            if hasattr(values, 'data') and 'start' in values.data:
+                start = values.data['start']
                 if isinstance(start, datetime):
                     start = start.isoformat()
                 start_dt = datetime.fromisoformat(start)
@@ -190,8 +190,8 @@ class RescheduleEventInput(BaseModel):
             v = v.isoformat()
         try:
             v_dt = datetime.fromisoformat(v)
-            if 'new_start' in values:
-                start = values['new_start']
+            if hasattr(values, 'data') and 'new_start' in values.data:
+                start = values.data['new_start']
                 if isinstance(start, datetime):
                     start = start.isoformat()
                 start_dt = datetime.fromisoformat(start)
@@ -266,8 +266,8 @@ class ListEventsInput(BaseModel):
     @classmethod
     def validate_end(cls, v, values):
         if v is None:
-            if 'start' in values:
-                start = values['start']
+            if hasattr(values, 'data') and 'start' in values.data:
+                start = values.data['start']
                 if isinstance(start, datetime):
                     start = start.isoformat()
                 start_dt = datetime.fromisoformat(start)
@@ -277,8 +277,8 @@ class ListEventsInput(BaseModel):
             v = v.isoformat()
         try:
             v_dt = datetime.fromisoformat(v)
-            if 'start' in values:
-                start = values['start']
+            if hasattr(values, 'data') and 'start' in values.data:
+                start = values.data['start']
                 if isinstance(start, datetime):
                     start = start.isoformat()
                 start_dt = datetime.fromisoformat(start)
