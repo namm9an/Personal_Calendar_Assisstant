@@ -14,7 +14,7 @@ from uuid import UUID
 from typing import Dict, List, Optional, Any, Union, Generator, AsyncGenerator
 import logging
 import asyncio
-from motor.motor_asyncio import AsyncIOMotorClient
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from bson import ObjectId
 from app.models.mongodb_models import User, Event, Session, AgentLog
 from app.core.exceptions import ToolExecutionError
@@ -109,18 +109,32 @@ def repository(mongodb_client):
     # We don't await initialize here as it will be handled in the test
     return repo
 
-@pytest.fixture
-def test_user():
-    """Create a test user for non-async tests."""
-    user = User(
-        id=str(ObjectId()),
-        email="test@example.com",
-        name="Test User",
-        google_access_token="test_google_token",
-        microsoft_access_token="test_microsoft_token",
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
-    )
+@pytest_asyncio.fixture
+async def test_user(test_db):
+    """Create a test user for tests and insert it into the database."""
+    user_id = ObjectId()
+    user_data = {
+        "_id": user_id,
+        "email": "test@example.com",
+        "name": "Test User",
+        "google_access_token": "test_google_token",
+        "microsoft_access_token": "test_microsoft_token",
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+        "is_active": True,
+        "timezone": "UTC",
+        "working_hours_start": "09:00",
+        "working_hours_end": "17:00",
+        "preferences": {}
+    }
+    
+    # Insert the user into the database
+    await test_db.users.insert_one(user_data)
+    
+    # Create a User object with string ID
+    user_data["_id"] = str(user_id)
+    user = User(**user_data)
+    
     return user
 
 @pytest_asyncio.fixture
@@ -236,7 +250,7 @@ class MockGoogleService:
             }
         ]
 
-    async def find_free_slots(self, start_time, end_time, duration_minutes=30, calendar_id="primary"):
+    async def find_free_slots(self, duration_minutes=30, range_start=None, range_end=None, calendar_id="primary"):
         """Mock find free slots."""
         return [
             {
@@ -249,83 +263,105 @@ class MockGoogleService:
             }
         ]
 
-    async def create_event(self, event_data):
+    async def create_event(self, event_data, calendar_id="primary"):
         """Mock create event."""
+        # Process attendees properly
+        attendees = []
+        if "attendees" in event_data:
+            for attendee in event_data["attendees"]:
+                if isinstance(attendee, dict):
+                    attendees.append(attendee)
+                else:
+                    attendees.append({"email": attendee["email"] if isinstance(attendee, dict) else attendee})
+        
         return {
             "id": "mock_google_event_2",
             "summary": event_data["summary"],
-            "start": {"dateTime": event_data["start"]},
-            "end": {"dateTime": event_data["end"]},
-            "attendees": [{"email": a} for a in event_data.get("attendees", [])],
-            "htmlLink": "https://calendar.google.com/event?id=456"
+            "start": event_data["start"],
+            "end": event_data["end"],
+            "attendees": attendees,
+            "htmlLink": "https://calendar.google.com/event?id=125"
         }
-
-    async def update_event(self, event_id, event_data):
+    
+    async def update_event(self, event_id, event_data, calendar_id="primary"):
         """Mock update event."""
         return {
             "id": event_id,
-            "summary": event_data["summary"],
-            "start": {"dateTime": event_data["start"]},
-            "end": {"dateTime": event_data["end"]},
-            "attendees": [{"email": a} for a in event_data.get("attendees", [])],
-            "htmlLink": "https://calendar.google.com/event?id=789"
+            "summary": event_data.get("summary", "Updated Event"),
+            "start": event_data.get("start", BASE_DATETIME.isoformat()),
+            "end": event_data.get("end", (BASE_DATETIME + timedelta(hours=1)).isoformat()),
+            "attendees": event_data.get("attendees", []),
+            "htmlLink": "https://calendar.google.com/event?id=126"
         }
-
-    async def delete_event(self, event_id):
+    
+    async def delete_event(self, event_id, calendar_id="primary"):
         """Mock delete event."""
+        return True
+        
+    async def cancel_event(self, event_id, calendar_id="primary", start=None, end=None):
+        """Mock cancel event."""
         return True
 
 class MockMicrosoftService:
     """Mock Microsoft Calendar service for testing."""
+    
     def __init__(self, credentials):
         self.credentials = credentials
-
+    
     async def list_events(self, time_min=None, time_max=None, calendar_id="primary", max_results=10):
         """Mock list events."""
         return [
             {
                 "id": "mock_ms_event_1",
-                "subject": "Mock MS Event",
-                "start": {"dateTime": BASE_DATETIME.isoformat(), "timeZone": "UTC"},
-                "end": {"dateTime": (BASE_DATETIME + timedelta(hours=1)).isoformat(), "timeZone": "UTC"},
-                "attendees": [{"emailAddress": {"address": "test@example.com"}}],
-                "webLink": "https://outlook.office.com/calendar/item/123"
+                "summary": "Mock MS Event",
+                "start": {"dateTime": BASE_DATETIME.isoformat()},
+                "end": {"dateTime": (BASE_DATETIME + timedelta(hours=1)).isoformat()},
+                "attendees": [{"email": "test@example.com"}],
+                "htmlLink": "https://outlook.office.com/calendar/event/123"
             }
         ]
-
-    async def find_free_slots(self, start_time, end_time, duration_minutes=30, calendar_id="primary"):
+    
+    async def find_free_slots(self, duration_minutes=30, range_start=None, range_end=None, calendar_id="primary"):
         """Mock find free slots."""
         return [
             {
                 "start": BASE_DATETIME.isoformat(),
                 "end": (BASE_DATETIME + timedelta(minutes=duration_minutes)).isoformat()
+            },
+            {
+                "start": (BASE_DATETIME + timedelta(hours=4)).isoformat(),
+                "end": (BASE_DATETIME + timedelta(hours=4, minutes=duration_minutes)).isoformat()
             }
         ]
-
-    async def create_event(self, event_data):
+    
+    async def create_event(self, event_data, calendar_id="primary"):
         """Mock create event."""
         return {
             "id": "mock_ms_event_2",
-            "subject": event_data["subject"],
-            "start": {"dateTime": event_data["start"], "timeZone": "UTC"},
-            "end": {"dateTime": event_data["end"], "timeZone": "UTC"},
-            "attendees": [{"emailAddress": {"address": a}} for a in event_data.get("attendees", [])],
-            "webLink": "https://outlook.office.com/calendar/item/456"
+            "summary": event_data.get("summary", "New Event"),
+            "start": event_data.get("start", BASE_DATETIME.isoformat()),
+            "end": event_data.get("end", (BASE_DATETIME + timedelta(hours=1)).isoformat()),
+            "attendees": event_data.get("attendees", []),
+            "htmlLink": "https://outlook.office.com/calendar/event/125"
         }
-
-    async def update_event(self, event_id, event_data):
+    
+    async def update_event(self, event_id, event_data, calendar_id="primary"):
         """Mock update event."""
         return {
             "id": event_id,
-            "subject": event_data["subject"],
-            "start": {"dateTime": event_data["start"], "timeZone": "UTC"},
-            "end": {"dateTime": event_data["end"], "timeZone": "UTC"},
-            "attendees": [{"emailAddress": {"address": a}} for a in event_data.get("attendees", [])],
-            "webLink": "https://outlook.office.com/calendar/item/789"
+            "summary": event_data.get("summary", "Updated Event"),
+            "start": event_data.get("start", BASE_DATETIME.isoformat()),
+            "end": event_data.get("end", (BASE_DATETIME + timedelta(hours=1)).isoformat()),
+            "attendees": event_data.get("attendees", []),
+            "htmlLink": "https://outlook.office.com/calendar/event/126"
         }
-
-    async def delete_event(self, event_id):
+    
+    async def delete_event(self, event_id, calendar_id="primary"):
         """Mock delete event."""
+        return True
+        
+    async def cancel_event(self, event_id, calendar_id="primary", start=None, end=None):
+        """Mock cancel event."""
         return True
 
 @pytest.fixture(autouse=True)
@@ -354,13 +390,23 @@ def mock_langgraph_runner():
     return runner
 
 @pytest_asyncio.fixture(autouse=True)
-async def setup_test_db(test_db: AsyncIOMotorClient):
+async def setup_test_db(test_db: AsyncIOMotorDatabase):
     """Fixture to ensure the test database is clean before each test."""
     # This fixture can be used to clear collections before each test if needed
     collections = ['users', 'events', 'sessions', 'agent_logs', 'oauth_states']
+    
+    # Get the list of collections first
+    collection_names = []
+    # Await the coroutine properly instead of using async for
+    cursor = await test_db.list_collections()
+    async for collection in cursor:
+        collection_names.append(collection["name"])
+    
+    # Then delete data from each collection that exists
     for collection in collections:
-        if collection in await test_db.list_collection_names():
-            await test_db[collection].delete_many({})
+        if collection in collection_names:
+            await test_db.drop_collection(collection)
+    
     yield test_db
 
 @pytest.fixture

@@ -6,6 +6,7 @@ from typing import List, Dict, Any
 
 import pytest
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import ValidationError

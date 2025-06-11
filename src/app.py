@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -15,6 +15,10 @@ from src.core.exceptions import (
     AuthenticationError,
     NotFoundError
 )
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
+from fastapi.security import OAuth2AuthorizationCodeBearer
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(
@@ -45,7 +49,10 @@ app = FastAPI(
     title="Personal Calendar Assistant",
     description="AI-powered calendar management system",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url="/api/openapi.json",
 )
 
 # CORS middleware
@@ -125,6 +132,35 @@ async def readyz(repo: MongoDBRepository = Depends(get_repository)):
         logger.error(f"Readiness check failed: {e}")
         raise HTTPException(status_code=503, detail="Service not ready")
 
+# Health check endpoint
+@app.get("/healthz", status_code=200)
+async def health_check():
+    """
+    Health check endpoint for monitoring and deployment.
+    Returns basic system information and status.
+    """
+    try:
+        # Check MongoDB connection
+        await mongodb.db.command("ping")
+        db_status = "healthy"
+    except Exception as e:
+        logger.error(f"Database health check failed: {str(e)}")
+        db_status = "unhealthy"
+        
+    return {
+        "status": "ok",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "1.0.0",
+        "database": db_status,
+        "uptime": time.time() - app.state.start_time if hasattr(app.state, "start_time") else 0
+    }
+
+# Startup event to record application start time
+@app.on_event("startup")
+async def startup_event():
+    app.state.start_time = time.time()
+    logger.info("Application starting up")
+
 # Import and include routers
 from src.api.auth import router as auth_router
 from src.api.calendar import router as calendar_router
@@ -150,4 +186,23 @@ app.include_router(
     prefix="/api/v1/agent",
     tags=["AI Agent"],
     responses={401: {"description": "Unauthorized"}}
-) 
+)
+
+# Custom OpenAPI docs
+@app.get("/api/docs", include_in_schema=False)
+async def get_swagger_documentation():
+    return get_swagger_ui_html(
+        openapi_url="/api/openapi.json",
+        title="Personal Calendar Assistant API Documentation",
+        swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@3/swagger-ui-bundle.js",
+        swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@3/swagger-ui.css",
+    )
+
+# Error handler for all exceptions
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "An unexpected error occurred. Please try again later."},
+    ) 

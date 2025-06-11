@@ -39,7 +39,7 @@ def test_detect_intent_reschedule():
 
 def test_detect_intent_ambiguous():
     """Test detecting ambiguous intent."""
-    intent, confidence = detect_intent("create and delete meeting")
+    intent, confidence = detect_intent("create and cancel the meeting tomorrow")
     assert intent == "ambiguous"
     assert confidence < 0.6
 

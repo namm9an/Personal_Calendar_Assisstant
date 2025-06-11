@@ -6,6 +6,11 @@ def detect_intent(text: str) -> Tuple[str, float]:
     """Detect intent from user input."""
     text_lower = text.lower()
     
+    # Check for ambiguous cases first
+    if (any(word in text_lower for word in ["create", "schedule"]) and 
+        any(word in text_lower for word in ["cancel", "delete"])):
+        return "ambiguous", 0.5
+    
     # Basic intent detection rules
     if any(word in text_lower for word in ["create", "schedule", "book", "add"]):
         if "meeting" in text_lower or "event" in text_lower:
@@ -25,13 +30,14 @@ def detect_intent(text: str) -> Tuple[str, float]:
         if "meeting" in text_lower or "event" in text_lower:
             return "reschedule_event", 0.95
     
-    elif any(word in text_lower for word in ["list", "show", "get"]):
-        if "meeting" in text_lower or "event" in text_lower:
+    elif any(word in text_lower for word in ["list", "show", "get", "what"]):
+        if "meeting" in text_lower or "event" in text_lower or "calendar" in text_lower:
             return "list_events", 0.90
-    
-    # Ambiguous cases
-    if any(word in text_lower for word in ["create", "schedule"]) and any(word in text_lower for word in ["cancel", "delete"]):
-        return "ambiguous", 0.5
+            
+    # Find free slots intent
+    elif any(word in text_lower for word in ["find", "check", "look for"]):
+        if "free" in text_lower and ("slot" in text_lower or "time" in text_lower):
+            return "find_free_slots", 0.90
     
     # No intent detected
     raise ValueError("Could not detect intent from input")

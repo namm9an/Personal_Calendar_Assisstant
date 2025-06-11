@@ -92,4 +92,13 @@ class ToolExecutionError(BaseError):
         message: str = "Tool execution failed",
         details: Optional[Dict[str, Any]] = None
     ):
+        super().__init__(message, status_code=500, details=details)
+
+class EncryptionError(BaseError):
+    """Raised when encryption or decryption fails."""
+    def __init__(
+        self,
+        message: str = "Encryption/decryption operation failed",
+        details: Optional[Dict[str, Any]] = None
+    ):
         super().__init__(message, status_code=500, details=details) 

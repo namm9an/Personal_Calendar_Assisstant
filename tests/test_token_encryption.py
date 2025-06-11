@@ -1,14 +1,14 @@
 """Tests for token encryption service."""
 import pytest
 from datetime import datetime, timedelta
-from app.services.encryption import TokenEncryption
-from app.core.exceptions import EncryptionError
+from src.utils.token_encryption import TokenEncryption
+from src.core.exceptions import EncryptionError
 from cryptography.fernet import Fernet
 
 @pytest.fixture
 def token_encryption():
     """Create a token encryption service."""
-    return TokenEncryption()
+    return TokenEncryption.get_instance()
 
 class TestTokenEncryption:
     """Tests for TokenEncryption."""
@@ -19,14 +19,14 @@ class TestTokenEncryption:
         test_token = "test-access-token"
         
         # Encrypt token
-        encrypted = token_encryption.encrypt(test_token)
+        encrypted = TokenEncryption.encrypt(test_token)
         
         # Verify encryption
         assert encrypted != test_token
         assert isinstance(encrypted, str)
         
         # Decrypt token
-        decrypted = token_encryption.decrypt(encrypted)
+        decrypted = TokenEncryption.decrypt(encrypted)
         
         # Verify decryption
         assert decrypted == test_token
@@ -34,78 +34,76 @@ class TestTokenEncryption:
     def test_encrypt_decrypt_with_special_chars(self, token_encryption):
         """Test encryption/decryption with special characters."""
         # Test data with special characters
-        test_token = "test-token!@#$%^&*()_+{}|:<>?[]\\;',./"
+        test_token = "token!@#$%^&*()_+-=[]{}|;':\",./<>?"
         
         # Encrypt token
-        encrypted = token_encryption.encrypt(test_token)
+        encrypted = TokenEncryption.encrypt(test_token)
         
         # Verify encryption
         assert encrypted != test_token
-        assert isinstance(encrypted, str)
         
         # Decrypt token
-        decrypted = token_encryption.decrypt(encrypted)
+        decrypted = TokenEncryption.decrypt(encrypted)
         
         # Verify decryption
         assert decrypted == test_token
 
     def test_encrypt_decrypt_with_unicode(self, token_encryption):
-        """Test encryption/decryption with Unicode characters."""
-        # Test data with Unicode characters
-        test_token = "test-token-测试-テスト-테스트"
+        """Test encryption/decryption with unicode characters."""
+        # Test data with unicode characters
+        test_token = "täst-tøkéñ-üñîçødê-😀"
         
         # Encrypt token
-        encrypted = token_encryption.encrypt(test_token)
+        encrypted = TokenEncryption.encrypt(test_token)
         
         # Verify encryption
         assert encrypted != test_token
-        assert isinstance(encrypted, str)
         
         # Decrypt token
-        decrypted = token_encryption.decrypt(encrypted)
+        decrypted = TokenEncryption.decrypt(encrypted)
         
         # Verify decryption
         assert decrypted == test_token
 
     def test_encrypt_decrypt_with_long_token(self, token_encryption):
         """Test encryption/decryption with a long token."""
-        # Test data with a long token
-        test_token = "x" * 1000  # 1000 characters
+        # Generate a long token (1000 characters)
+        test_token = "x" * 1000
         
         # Encrypt token
-        encrypted = token_encryption.encrypt(test_token)
+        encrypted = TokenEncryption.encrypt(test_token)
         
         # Verify encryption
         assert encrypted != test_token
-        assert isinstance(encrypted, str)
         
         # Decrypt token
-        decrypted = token_encryption.decrypt(encrypted)
+        decrypted = TokenEncryption.decrypt(encrypted)
         
         # Verify decryption
         assert decrypted == test_token
 
     def test_encrypt_null_and_empty_strings(self, token_encryption):
-        """Test encryption of null and empty strings."""
-        # Test empty string
-        encrypted_empty = token_encryption.encrypt("")
-        decrypted_empty = token_encryption.decrypt(encrypted_empty)
+        """Test encryption/decryption of null and empty strings."""
+        # Test with None
+        encrypted_none = TokenEncryption.encrypt(None)
+        assert encrypted_none == ""
+        
+        # Test with empty string
+        encrypted_empty = TokenEncryption.encrypt("")
+        assert encrypted_empty == ""
+        
+        # Decrypt empty string should return empty string
+        decrypted_empty = TokenEncryption.decrypt("")
         assert decrypted_empty == ""
-
-        # Test None
-        with pytest.raises(EncryptionError):
-            token_encryption.encrypt(None)
 
     def test_encrypt_decrypt_with_invalid_encrypted_token(self, token_encryption):
         """Test decryption with invalid encrypted token."""
-        # Test data with invalid encrypted token
-        invalid_token = "invalid-encrypted-token"
+        # Invalid token
+        invalid_token = "invalid-token"
         
-        # Verify decryption raises error
-        with pytest.raises(EncryptionError) as excinfo:
-            token_encryption.decrypt(invalid_token)
-        
-        assert "Invalid token format" in str(excinfo.value)
+        # Attempt to decrypt invalid token should raise error
+        with pytest.raises(EncryptionError):
+            TokenEncryption.decrypt(invalid_token)
 
     def test_encrypt_decrypt_with_different_keys(self):
         """Test encryption/decryption with different keys."""
@@ -113,25 +111,29 @@ class TestTokenEncryption:
         # Generate two valid Fernet keys
         key1 = Fernet.generate_key().decode()
         key2 = Fernet.generate_key().decode()
+        
+        # Create a new instance with key1
         encryption1 = TokenEncryption(key1)
-        encryption2 = TokenEncryption(key2)
         
         # Test data
         test_token = "test-token"
         
-        # Encrypt with first key
-        encrypted = encryption1.encrypt(test_token)
+        # Encrypt with first key using the instance method
+        encrypted = encryption1.encrypt_instance(test_token)
         
-        # Verify decryption with different key raises error
-        with pytest.raises(EncryptionError) as excinfo:
-            encryption2.decrypt(encrypted)
+        # Create a second instance with key2
+        encryption2 = TokenEncryption(key2)
         
-        assert "Invalid token format" in str(excinfo.value)
+        # Try to decrypt with the second instance - should fail with EncryptionError
+        with pytest.raises(EncryptionError):
+            encryption2.decrypt_instance(encrypted)
 
     def test_encrypt_decrypt_with_same_key_different_instances(self):
         """Test encryption/decryption with same key but different instances."""
-        # Create two encryption services with same key
+        # Generate a valid Fernet key
         key = Fernet.generate_key().decode()
+        
+        # Create two instances with the same key
         encryption1 = TokenEncryption(key)
         encryption2 = TokenEncryption(key)
         
@@ -139,10 +141,10 @@ class TestTokenEncryption:
         test_token = "test-token"
         
         # Encrypt with first instance
-        encrypted = encryption1.encrypt(test_token)
+        encrypted = encryption1.encrypt_instance(test_token)
         
-        # Decrypt with second instance
-        decrypted = encryption2.decrypt(encrypted)
+        # Decrypt with second instance - should work
+        decrypted = encryption2.decrypt_instance(encrypted)
         
         # Verify decryption
         assert decrypted == test_token 

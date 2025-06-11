@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from src.calendar_tool_wrappers import (
     list_events_tool,
     find_free_slots_tool,
@@ -75,9 +75,16 @@ class CalendarAgent:
 
     async def _handle_list_events(self, user_id: str, provider: str) -> Dict[str, Any]:
         """Handle listing events."""
+        # Set default time range to current day
+        now = datetime.now()
+        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_time = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
         input = ListEventsInput(
             provider=provider,
-            user_id=user_id
+            user_id=user_id,
+            start=start_time,
+            end=end_time
         )
         events = await list_events_tool(input)
         return {"events": events}
@@ -100,12 +107,13 @@ class CalendarAgent:
         """Handle creating an event."""
         # Parse event details from text
         # This is a simplified version - in reality, you'd use NLP to extract these
+        now = datetime.now()
         input = CreateEventInput(
             provider=provider,
             user_id=user_id,
             summary="New Event",
-            start=datetime.now(),
-            end=datetime.now(),
+            start=now,
+            end=now + timedelta(hours=1),
             description="",
             location="",
             attendees=[]
@@ -116,13 +124,14 @@ class CalendarAgent:
     async def _handle_update_event(self, text: str, user_id: str, provider: str) -> Dict[str, Any]:
         """Handle updating an event."""
         # Parse event details from text
+        now = datetime.now()
         input = UpdateEventInput(
             provider=provider,
             user_id=user_id,
             event_id="event_id",  # This should be extracted from text
             summary="Updated Event",
-            start=datetime.now(),
-            end=datetime.now()
+            start=now,
+            end=now + timedelta(hours=1)
         )
         event = await update_event_tool(input)
         return {"event": event}
@@ -139,24 +148,26 @@ class CalendarAgent:
 
     async def _handle_reschedule_event(self, text: str, user_id: str, provider: str) -> Dict[str, Any]:
         """Handle rescheduling an event."""
+        now = datetime.now()
         input = RescheduleEventInput(
             provider=provider,
             user_id=user_id,
             event_id="event_id",  # This should be extracted from text
-            new_start=datetime.now(),
-            new_end=datetime.now()
+            new_start=now,
+            new_end=now + timedelta(hours=1)
         )
         event = await reschedule_event_tool(input)
         return {"event": event}
 
     async def _handle_cancel_event(self, text: str, user_id: str, provider: str) -> Dict[str, Any]:
         """Handle canceling an event."""
+        now = datetime.now()
         input = CancelEventInput(
             provider=provider,
             user_id=user_id,
             event_id="event_id",  # This should be extracted from text
-            start=datetime.now(),
-            end=datetime.now()
+            start=now,
+            end=now + timedelta(hours=1)
         )
         success = await cancel_event_tool(input)
         return {"success": success}

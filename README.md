@@ -1,150 +1,122 @@
 # Personal Calendar Assistant
 
-An AI-powered calendar management system that helps users manage their schedules across multiple calendar providers (Google Calendar and Microsoft Calendar).
+An AI-powered calendar management system that helps you manage your calendar events across Google Calendar and Microsoft Outlook using natural language instructions.
 
 ## Features
 
-- 🤖 AI-powered calendar management
-- 📅 Multi-provider support (Google & Microsoft)
-- 🔄 Real-time synchronization
-- 🔒 Secure OAuth authentication
-- 📱 Responsive web interface
-- 📊 Analytics and insights
-- 🔔 Smart notifications
+- Google Calendar integration
+- Microsoft Outlook integration
+- Natural language understanding
+- Cross-calendar event management
+- Secure token handling with encryption
+- Multi-provider orchestration
+- MongoDB storage for data persistence
+- Docker deployment for production environments
 
-## Tech Stack
+## Project Phases
 
-- **Backend**: FastAPI, Python 3.10+
-- **Database**: MongoDB Atlas
-- **Cache**: Redis
-- **AI/ML**: Google Gemini
-- **Authentication**: OAuth 2.0
-- **Deployment**: Docker, Kubernetes
-- **CI/CD**: GitHub Actions
-- **Monitoring**: Prometheus, Grafana
+### Phase 1: Google Calendar Integration
+- Set up basic project structure
+- Implement Google OAuth2 authentication
+- Create Google Calendar service
+- Add calendar operation tools (list, create, update, delete events)
 
-## Prerequisites
+### Phase 2: Microsoft Calendar Integration & Encryption
+- Implement Microsoft OAuth2 authentication
+- Create Microsoft Calendar service
+- Add secure token encryption for storage
+- Add cross-provider calendar tools
 
-- Python 3.10 or higher
-- Docker and Docker Compose
-- MongoDB Atlas account
-- Redis instance
-- Google Cloud Platform account
-- Microsoft Azure account
-- Google Gemini API key
+### Phase 3: Agent & Multi-Provider Orchestration
+- Add intent detection for natural language processing
+- Implement LLM-based agent for calendar operations
+- Create multi-provider orchestration layer
+- Add more sophisticated calendar tools (find free slots, etc.)
 
-## Local Development Setup
+### Phase 4: MongoDB Migration & Deployment
+- Migrate data storage to MongoDB for scalability
+- Create MongoDB models and repositories
+- Update application to use MongoDB
+- Add Docker setup for containerization
+
+### Phase 5: Production Deployment
+- Docker Compose configuration for multi-container deployment
+- NGINX integration for reverse proxy and SSL termination
+- Health check endpoint for monitoring
+- Production deployment documentation
+- Environment configuration for different deployment environments
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.10+
+- Google API credentials
+- Microsoft API credentials
+- MongoDB (local or Atlas)
+
+### Installation
 
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/personal-calendar-assistant.git
-   cd personal-calendar-assistant
-   ```
-
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Create environment file:
-   ```bash
-   cp .env.example .env
-   ```
-   Edit `.env` with your configuration values.
-
-5. Start the development environment:
-   ```bash
-   docker-compose up --build
-   ```
-
-The application will be available at:
-- Backend API: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
-- Health Check: http://localhost:8000/healthz
-
-## Project Structure
-
-```
-personal-calendar-assistant/
-├── src/
-│   ├── api/              # API routes
-│   ├── core/             # Core functionality
-│   ├── db/               # Database models and connection
-│   ├── models/           # Pydantic models
-│   ├── repositories/     # Data access layer
-│   ├── schemas/          # Request/response schemas
-│   ├── services/         # Business logic
-│   └── utils/            # Utility functions
-├── tests/                # Test suite
-├── docs/                 # Documentation
-├── scripts/              # Utility scripts
-├── k8s/                  # Kubernetes manifests
-├── monitoring/           # Monitoring configuration
-├── .env.example          # Environment template
-├── docker-compose.yml    # Docker Compose config
-├── Dockerfile           # Docker configuration
-└── README.md            # This file
-```
-
-## API Documentation
-
-The API documentation is available at `/docs` when running the application. It provides detailed information about:
-
-- Authentication endpoints
-- Calendar management endpoints
-- AI agent endpoints
-- Webhook endpoints
-
-## Testing
-
-Run the test suite:
 ```bash
-pytest
+git clone https://github.com/yourusername/personal-calendar-assistant.git
+cd personal-calendar-assistant
 ```
 
-Run with coverage:
+2. Install dependencies:
 ```bash
-pytest --cov=src
+pip install -r requirements.txt
+```
+
+3. Set up environment variables (create a .env file):
+```
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+MICROSOFT_CLIENT_ID=your_microsoft_client_id
+MICROSOFT_CLIENT_SECRET=your_microsoft_client_secret
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DB=calendar_db
+ENCRYPTION_KEY=your_secure_encryption_key
+```
+
+4. Run the application:
+```bash
+uvicorn src.app:app --reload
 ```
 
 ## Deployment
 
-### Docker
+For production deployment, we provide Docker and Docker Compose configuration files:
 
-Build the image:
+1. Build and run with Docker Compose:
 ```bash
-docker build -t personal-calendar-assistant .
+docker-compose up -d
 ```
 
-Run the container:
+2. Or use the deployment script:
 ```bash
-docker run -p 8000:8000 personal-calendar-assistant
+chmod +x scripts/deploy.sh
+./scripts/deploy.sh
 ```
 
-### Kubernetes
+See the [Deployment Guide](docs/deployment.md) for detailed instructions.
 
-Deploy to Kubernetes:
+## API Documentation
+
+When running the application, access the API documentation at:
+- http://localhost:8000/api/docs
+
+## Testing
+
+Run tests with pytest:
 ```bash
-kubectl apply -f k8s/
+pip install -r requirements-test.txt
+pytest
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Support
 

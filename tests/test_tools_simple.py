@@ -4,6 +4,9 @@ import pytest_asyncio
 from datetime import datetime, timedelta
 from unittest.mock import patch, AsyncMock, MagicMock
 from bson import ObjectId
+from bson.errors import InvalidId
+from motor.motor_asyncio import AsyncIOMotorClient
+from app.models.mongodb_models import User
 
 from src.core.exceptions import ToolExecutionError
 from src.calendar_tool_wrappers import (
@@ -199,4 +202,101 @@ async def test_create_event_tool_success():
             # Verify the result by checking attributes instead of type
             assert hasattr(result, 'event')
             assert result.event.id == "new_event_id"
-            assert result.event.summary == "New Event" 
+            assert result.event.summary == "New Event"
+
+@pytest_asyncio.fixture
+async def mongo_client():
+    """Create a MongoDB client for testing."""
+    client = AsyncIOMotorClient("mongodb://localhost:27017")
+    try:
+        # Test connection
+        await client.admin.command('ping')
+        yield client
+    finally:
+        client.close()
+
+@pytest_asyncio.fixture
+async def test_db(mongo_client):
+    """Create a test database that is dropped after the session."""
+    db_name = "calendar_test_debug"
+    db = mongo_client[db_name]
+    yield db
+    await mongo_client.drop_database(db_name)
+
+@pytest.mark.asyncio
+async def test_user_model(test_db):
+    """Test creating and retrieving a user from MongoDB."""
+    # Create a user with an ObjectId
+    user_id = ObjectId()
+    user_data = {
+        "_id": user_id,
+        "name": "Test User",
+        "email": "test@example.com",
+        "google_access_token": "test_google_token",
+        "microsoft_access_token": "test_microsoft_token",
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+        "is_active": True
+    }
+    
+    # Insert into MongoDB
+    result = await test_db.users.insert_one(user_data)
+    
+    # Retrieve from MongoDB
+    retrieved_data = await test_db.users.find_one({"_id": user_id})
+    assert retrieved_data is not None
+    print(f"Retrieved data from MongoDB: {retrieved_data}")
+    
+    # Convert ObjectId to string before creating the User model
+    retrieved_data["_id"] = str(retrieved_data["_id"])
+    
+    # Try to create a User model from the data
+    try:
+        user = User(**retrieved_data)
+        print(f"User model created successfully: {user}")
+    except Exception as e:
+        print(f"Failed to create User model: {e}")
+        raise
+    
+    # Ensure the id is correctly handled
+    assert str(user.id) == str(user_id)
+
+@pytest.mark.asyncio
+async def test_get_calendar_service_mock(test_db):
+    """Test the mock get_calendar_service function."""
+    # Create a user with an ObjectId directly
+    user_id = ObjectId()
+    user_data = {
+        "_id": user_id,
+        "name": "Test User",
+        "email": "test@example.com",
+        "google_access_token": "test_google_token",
+        "microsoft_access_token": "test_microsoft_token",
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+        "is_active": True
+    }
+    await test_db.users.insert_one(user_data)
+    
+    # Convert ObjectId to string for use in the function
+    user_id_str = str(user_id)
+    
+    # Mock the get_calendar_service function
+    async def mock_get_calendar_service(provider: str, user_id: str):
+        """Mock implementation of get_calendar_service function."""
+        # Get user from the database
+        user_data = await test_db.users.find_one({"_id": ObjectId(user_id)})
+        
+        if not user_data:
+            raise ToolExecutionError(f"User not found: {user_id}")
+        
+        # Convert _id to string before creating the model
+        user_data["_id"] = str(user_data["_id"])
+        user = User(**user_data)
+        
+        return user
+    
+    # Try to get the user
+    user = await mock_get_calendar_service("google", user_id_str)
+    assert user is not None
+    assert user.google_access_token == "test_google_token" 

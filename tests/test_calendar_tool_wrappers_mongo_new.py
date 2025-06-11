@@ -7,6 +7,7 @@ from typing import List, Dict, Any
 import pytest
 import pytest_asyncio
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import ValidationError
@@ -91,7 +92,10 @@ async def test_list_events_tool_happy_path(
     assert len(result.events) > 0
     for event in result.events:
         assert isinstance(event, EventSchema)
-        assert event.summary in ["Test Event 1", "Test Event 2", "Mock Event"]
+        if provider_name == "google":
+            assert event.summary in ["Test Event 1", "Test Event 2", "Mock Google Event", "Another Mock Event"]
+        else:
+            assert event.summary in ["Test Event 1", "Test Event 2", "Mock MS Event"]
 
 @pytest.mark.asyncio
 async def test_list_events_tool_invalid_provider(test_user: User):
@@ -488,16 +492,50 @@ async def test_cancel_event_tool_happy_path(
 
 @pytest.fixture
 def mock_get_user_by_id():
-    """Creates a mock implementation of the get_user_by_id method"""
-    async def mock_get_user_by_id_impl(user_id):
-        # This is a mock user that will be returned for any user_id
+    """Mock for OAuthService.get_user_by_id method."""
+    
+    async def mock_get_user_by_id_impl(*args):
+        # Extract user_id from args (could be called as method or function)
+        # If called as a method: self, user_id = args
+        # If called as a function: user_id = args[0]
+        user_id = args[-1]  # Get the last argument which should be user_id
+        
+        # Create a proper User object with all required attributes
+        from app.models.mongodb_models import User
+        
         return User(
             id=user_id,
-            name="Test User",
             email="test@example.com",
+            name="Test User",
             google_access_token="test_google_token",
             microsoft_access_token="test_microsoft_token",
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
-    return mock_get_user_by_id_impl 
+    
+    return mock_get_user_by_id_impl
+
+@pytest.fixture(autouse=True)
+def patch_oauth_service(monkeypatch, mock_get_user_by_id):
+    """Patch OAuthService for all tests."""
+    from src.services.oauth_service import OAuthService
+    monkeypatch.setattr(OAuthService, "get_user_by_id", mock_get_user_by_id)
+    return mock_get_user_by_id
+
+@pytest.fixture(autouse=True)
+def mock_get_calendar_service_func(monkeypatch, mock_google_service, mock_microsoft_service):
+    """Mock the get_calendar_service function."""
+    
+    async def mock_get_calendar_service_impl(provider, user_id):
+        """Mock implementation of get_calendar_service."""
+        if provider == "google":
+            return mock_google_service
+        elif provider == "microsoft":
+            return mock_microsoft_service
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
+    
+    # Patch the get_calendar_service function
+    monkeypatch.setattr("src.calendar_tool_wrappers.get_calendar_service", mock_get_calendar_service_impl)
+    
+    return mock_get_calendar_service_impl 

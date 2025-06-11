@@ -89,14 +89,7 @@ class ListEventsWrapper(BaseCalendarWrapper):
             raise ToolExecutionError(f"Failed to list events: {str(e)}")
 
 async def update_event_tool(input: UpdateEventInput) -> UpdateEventOutput:
-    """Update an existing calendar event."""
-    if not input.provider in ("google", "microsoft"):
-        raise ToolExecutionError(f"Unsupported provider: {input.provider}")
-    
-    # Validate required fields
-    if not input.event_id:
-        raise ToolExecutionError("Event ID is required")
-    
+    """Tool for updating calendar events."""
     try:
         # Get calendar service for the provider
         calendar_service = await get_calendar_service(input.provider, input.user_id)
@@ -147,7 +140,7 @@ async def update_event_tool(input: UpdateEventInput) -> UpdateEventOutput:
     except Exception as e:
         error_msg = f"Failed to update event: {str(e)}"
         logger.error(error_msg)
-        raise ToolExecutionError(error_msg, original_exception=e)
+        raise ToolExecutionError(error_msg)
 
 class DeleteEventWrapper(BaseCalendarWrapper):
     """Wrapper for deleting calendar events."""
@@ -379,8 +372,8 @@ async def list_events_tool(input: ListEventsInput) -> ListEventsOutput:
         
         # List events
         events = await calendar_service.list_events(
-            start_time=input.start,
-            end_time=input.end,
+            time_min=input.start,
+            time_max=input.end,
             calendar_id=input.calendar_id or "primary",
             max_results=input.max_results
         )

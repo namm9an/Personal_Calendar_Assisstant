@@ -1,230 +1,179 @@
-# Calendar Assistant Deployment Guide
+# Deployment Guide for Personal Calendar Assistant
+
+This guide provides instructions for deploying the Personal Calendar Assistant application to a production environment using Docker and Docker Compose.
 
 ## Prerequisites
 
-- Kubernetes cluster (v1.19+)
-- Helm v3
-- kubectl configured
-- Docker registry access
-- MongoDB Atlas account
-- Redis Cloud account
-- Google Cloud Platform account (for OAuth)
-
-## Environment Setup
-
-1. Create a `.env` file with the following variables:
-```bash
-# MongoDB
-MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/<db>
-MONGODB_DB=calendar_assistant
-
-# Redis
-REDIS_URL=redis://<username>:<password>@<host>:<port>
-
-# Google OAuth
-GOOGLE_CLIENT_ID=<client_id>
-GOOGLE_CLIENT_SECRET=<client_secret>
-GOOGLE_REDIRECT_URI=https://<your-domain>/auth/callback
-
-# JWT
-JWT_SECRET=<your-secret>
-JWT_ALGORITHM=HS256
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
-
-# LLM API
-OPENAI_API_KEY=<your-api-key>
-
-# Monitoring
-PROMETHEUS_MULTIPROC_DIR=/tmp
-```
-
-2. Create Kubernetes secrets:
-```bash
-kubectl create secret generic calendar-secrets \
-  --from-env-file=.env
-```
+- Docker and Docker Compose installed on your server
+- Domain name (optional but recommended for production)
+- SSL certificates (optional for production, self-signed certificates will be generated otherwise)
+- Google OAuth2 credentials
+- Microsoft OAuth2 credentials
+- Gemini API key
+- 2GB+ RAM, 1+ CPU cores
 
 ## Deployment Steps
 
-1. Build and push Docker image:
+### 1. Clone the Repository
+
 ```bash
-docker build -t your-registry/calendar-assistant:latest .
-docker push your-registry/calendar-assistant:latest
+git clone https://github.com/yourusername/personal-calendar-assistant.git
+cd personal-calendar-assistant
 ```
 
-2. Install dependencies:
+### 2. Configure Environment Variables
+
+Create a `.env` file in the project root with the following variables:
+
 ```bash
-helm repo add bitnami https://charts.bitnami.com/bitnami
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo update
+# Copy the example file
+cp .env.example .env
+
+# Edit the .env file with your credentials
+nano .env
 ```
 
-3. Deploy the application:
+Fill in your actual credentials and configuration values in the `.env` file.
+
+### 3. Run the Deployment Script
+
+The project includes a deployment script that will:
+- Create necessary directories
+- Generate self-signed SSL certificates (if not provided)
+- Create basic HTML files
+- Build and start Docker services
+
 ```bash
-helm install calendar-assistant ./helm/calendar-assistant \
-  --set image.repository=your-registry/calendar-assistant \
-  --set image.tag=latest \
-  --set ingress.host=your-domain.com \
-  --set mongodb.auth.enabled=true \
-  --set redis.auth.enabled=true
+# Make the script executable
+chmod +x scripts/deploy.sh
+
+# Run the deployment script
+./scripts/deploy.sh
 ```
 
-4. Verify deployment:
+### 4. SSL Certificates for Production
+
+For a production environment, replace the self-signed certificates with proper SSL certificates:
+
+1. Place your SSL certificate and key files in the `nginx/ssl/` directory:
+   - `server.crt` (certificate file)
+   - `server.key` (private key file)
+
+2. Restart the NGINX container:
+   ```bash
+   docker-compose restart nginx
+   ```
+
+### 5. Custom Domain Configuration
+
+To use your own domain with the application:
+
+1. Update the NGINX configuration in `nginx/conf/default.conf`:
+   ```nginx
+   server_name yourdomain.com;
+   ```
+
+2. Update the `CORS_ORIGINS` in your `.env` file to include your domain:
+   ```
+   CORS_ORIGINS=["https://yourdomain.com"]
+   ```
+
+3. Restart the containers:
+   ```bash
+   docker-compose restart
+   ```
+
+### 6. Monitoring and Maintenance
+
+#### Health Check
+
+The application includes a health check endpoint at `/healthz` that provides basic system status information.
+
+#### Logs
+
+View application logs:
 ```bash
-kubectl get pods
-kubectl get services
-kubectl get ingress
+docker-compose logs app
 ```
 
-## Monitoring Setup
-
-1. Access Grafana:
+View MongoDB logs:
 ```bash
-kubectl port-forward svc/calendar-assistant-grafana 3000:80
-```
-Visit http://localhost:3000 (default credentials: admin/admin)
-
-2. Import dashboards:
-- Navigate to Dashboards > Import
-- Upload `monitoring/grafana/dashboards/calendar-assistant.json`
-
-3. Configure alerts:
-- Navigate to Alerting > Alert Rules
-- Import `monitoring/prometheus/rules/alerts.yml`
-
-## Load Testing
-
-1. Install Locust:
-```bash
-pip install locust
+docker-compose logs mongodb
 ```
 
-2. Run load test:
+View NGINX logs:
 ```bash
-cd tests/load
-python locustfile.py
+docker-compose logs nginx
 ```
 
-3. View results at http://localhost:8089
-
-## Scaling
-
-1. Horizontal Pod Autoscaling:
+Follow logs in real-time:
 ```bash
-kubectl get hpa
+docker-compose logs -f
 ```
 
-2. Manual scaling:
+#### Backups
+
+Create a MongoDB backup:
 ```bash
-kubectl scale deployment calendar-assistant --replicas=5
+docker exec calendar-mongodb mongodump --out /data/db/backup/$(date +%Y-%m-%d)
 ```
 
-## Backup and Restore
-
-1. MongoDB backup:
+Copy the backup to the host:
 ```bash
-mongodump --uri="<MONGODB_URI>" --out=/backup
+docker cp calendar-mongodb:/data/db/backup ./backup
 ```
 
-2. MongoDB restore:
+#### Updates
+
+Update to the latest version:
 ```bash
-mongorestore --uri="<MONGODB_URI>" /backup
+git pull
+docker-compose down
+docker-compose build
+docker-compose up -d
 ```
 
-3. Redis backup:
-```bash
-redis-cli -u <REDIS_URL> SAVE
-```
+### 7. Scaling and High Availability
+
+For a production environment with higher traffic and availability requirements:
+
+1. Use a proper MongoDB replica set
+2. Deploy multiple application instances behind a load balancer
+3. Use a container orchestration system like Kubernetes
+4. Set up monitoring with Prometheus and Grafana
+5. Implement automated backups
 
 ## Troubleshooting
 
-1. Check pod logs:
+### Common Issues
+
+#### Application Not Starting
+
+Check the application logs:
 ```bash
-kubectl logs -f deployment/calendar-assistant
+docker-compose logs app
 ```
 
-2. Check MongoDB connection:
+#### Database Connection Issues
+
+Verify MongoDB is running:
 ```bash
-kubectl exec -it deployment/calendar-assistant -- mongosh <MONGODB_URI>
+docker-compose ps mongodb
 ```
 
-3. Check Redis connection:
+Check MongoDB logs:
 ```bash
-kubectl exec -it deployment/calendar-assistant -- redis-cli -u <REDIS_URL>
+docker-compose logs mongodb
 ```
 
-4. Check Prometheus metrics:
-```bash
-kubectl port-forward svc/calendar-assistant-prometheus-server 9090:9090
-```
-Visit http://localhost:9090
+#### SSL Certificate Issues
 
-## Security Considerations
+Verify your SSL certificates are correctly placed in `nginx/ssl/` directory and have proper permissions.
 
-1. Enable TLS:
-```bash
-kubectl apply -f k8s/tls/cert-manager.yaml
-```
+### Getting Help
 
-2. Configure network policies:
-```bash
-kubectl apply -f k8s/network-policies/
-```
+If you encounter issues not covered in this guide:
 
-3. Enable RBAC:
-```bash
-kubectl apply -f k8s/rbac/
-```
-
-## Maintenance
-
-1. Update application:
-```bash
-helm upgrade calendar-assistant ./helm/calendar-assistant \
-  --set image.tag=new-version
-```
-
-2. Database maintenance:
-```bash
-kubectl exec -it deployment/calendar-assistant -- python scripts/maintenance.py
-```
-
-3. Monitor resource usage:
-```bash
-kubectl top pods
-kubectl top nodes
-```
-
-## Disaster Recovery
-
-1. Backup verification:
-```bash
-python scripts/verify_backup.py
-```
-
-2. Restore procedure:
-```bash
-python scripts/restore.py --backup-dir=/backup
-```
-
-3. Failover testing:
-```bash
-python scripts/test_failover.py
-```
-
-## Support
-
-For issues and support:
-1. Check logs and metrics in Grafana
-2. Review Prometheus alerts
-3. Contact system administrator
-4. Open GitHub issue
-
-## Additional Resources
-
-- [Kubernetes Documentation](https://kubernetes.io/docs/)
-- [Helm Documentation](https://helm.sh/docs/)
-- [MongoDB Atlas Documentation](https://docs.atlas.mongodb.com/)
-- [Redis Cloud Documentation](https://docs.redis.com/)
-- [Prometheus Documentation](https://prometheus.io/docs/)
-- [Grafana Documentation](https://grafana.com/docs/) 
+1. Check the project's GitHub issues page
+2. Review the application logs for specific error messages
+3. Contact the development team 

@@ -1,43 +1,78 @@
-class ToolExecutionError(Exception):
-    """Custom exception for errors that occur during tool execution."""
-    def __init__(self, message: str, original_exception: Exception = None):
-        super().__init__(message)
-        self.original_exception = original_exception
-        self.message = message
+from typing import Dict, Any, Optional
+from fastapi import HTTPException, status
 
-    def __str__(self):
-        if self.original_exception:
-            return f"{self.message} (Original error: {type(self.original_exception).__name__}: {str(self.original_exception)})"
-        return self.message
+class ServiceError(Exception):
+    """Base exception for service errors."""
+    def __init__(self, message: str, status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR):
+        self.message = message
+        self.status_code = status_code
+        super().__init__(self.message)
+
+
+class DatabaseError(ServiceError):
+    """Database operation error."""
+    def __init__(self, message: str = "Database operation failed"):
+        super().__init__(message, status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ConfigError(ServiceError):
+    """Configuration error."""
+    def __init__(self, message: str = "Configuration error"):
+        super().__init__(message, status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AuthError(ServiceError):
+    """Authentication error."""
+    def __init__(self, message: str = "Authentication failed"):
+        super().__init__(message, status.HTTP_401_UNAUTHORIZED)
+
+
+class OAuthError(ServiceError):
+    """OAuth error."""
+    def __init__(self, message: str = "OAuth Error"):
+        super().__init__(message, status.HTTP_400_BAD_REQUEST)
+
+
+class CalendarServiceError(ServiceError):
+    """Calendar service error."""
+    def __init__(self, message: str = "Calendar service error"):
+        super().__init__(message, status.HTTP_502_BAD_GATEWAY)
+
+
+class EncryptionError(ServiceError):
+    """Encryption/decryption error."""
+    def __init__(self, message: str = "Encryption or decryption failed"):
+        super().__init__(message, status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# For compatibility with src/core/exceptions.py
+class BaseError(Exception):
+    """Base exception class for the application."""
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 500,
+        details: Optional[Dict[str, Any]] = None
+    ):
+        self.message = message
+        self.status_code = status_code
+        self.details = details or {}
+        super().__init__(self.message)
+
+
+class ToolExecutionError(BaseError):
+    """Raised when a tool execution fails."""
+    def __init__(
+        self,
+        message: str = "Tool execution failed",
+        details: Optional[Dict[str, Any]] = None
+    ):
+        super().__init__(message, status_code=500, details=details)
 
 class CalendarError(Exception):
     """Custom exception for calendar-related errors."""
     pass
 
-class DatabaseError(Exception):
-    """Custom exception for database-related errors."""
-    pass
-
 class ValidationError(Exception):
     """Custom exception for validation errors."""
     pass
-
-class EncryptionError(Exception):
-    """Custom exception for encryption errors."""
-    pass
-
-class OAuthError(Exception):
-    """Custom exception for OAuth-related errors."""
-    def __init__(self, message: str, provider: str = None, original_exception: Exception = None):
-        super().__init__(message)
-        self.provider = provider
-        self.original_exception = original_exception
-        self.message = message
-
-    def __str__(self):
-        error_str = f"OAuth Error: {self.message}"
-        if self.provider:
-            error_str = f"[{self.provider}] {error_str}"
-        if self.original_exception:
-            error_str += f" (Original error: {type(self.original_exception).__name__}: {str(self.original_exception)})"
-        return error_str
