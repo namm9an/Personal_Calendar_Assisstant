@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useAuth } from "@/context/AuthContext";
-import Navbar from "@/components/Navbar";
+import { useAuth } from "../context/AuthContext";
+import Navbar from "../components/Navbar";
 
 export default function HomePage() {
   const { user, loading } = useAuth();

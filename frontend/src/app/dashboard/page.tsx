@@ -2,10 +2,10 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
-import Navbar from "@/components/Navbar";
-import AgentChat from "@/components/AgentChat";
-import CalendarView from "@/components/CalendarView";
+import { useAuth } from "../../context/AuthContext";
+import Navbar from "../../components/Navbar";
+import AgentChat from "../../components/AgentChat";
+import CalendarView from "../../components/CalendarView";
 
 export default function DashboardPage() {
   const { user, loading } = useAuth();

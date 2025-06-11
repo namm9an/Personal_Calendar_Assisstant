@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import AuthForm from "@/components/AuthForm";
-import { useAuth } from "@/context/AuthContext";
+import AuthForm from "../../components/AuthForm";
+import { useAuth } from "../../context/AuthContext";
 
 export default function SignupPage() {
   const { user, loading } = useAuth();

@@ -1,14 +1,10 @@
-import type { Metadata } from "next";
+"use client";
+
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { AuthProvider } from "@/context/AuthContext";
+import { AuthProvider } from "../context/AuthContext";
 
 const inter = Inter({ subsets: ["latin"] });
-
-export const metadata: Metadata = {
-  title: "Personal Calendar Assistant",
-  description: "AI-powered calendar management system",
-};
 
 export default function RootLayout({
   children,
@@ -17,6 +13,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <title>Personal Calendar Assistant</title>
+        <meta name="description" content="AI-powered calendar management system" />
+      </head>
       <body className={inter.className}>
         <AuthProvider>
           {children}
