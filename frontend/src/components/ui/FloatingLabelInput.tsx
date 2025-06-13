@@ -1,26 +1,35 @@
 "use client";
 
-import { useState } from 'react';
+import * as React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Input, InputProps } from '@/components/ui/input';
+import { Input } from '@/components/ui/input';
 
-interface FloatingLabelInputProps extends Omit<InputProps, 'id'> {
+interface FloatingLabelInputProps
+  extends Omit<React.ComponentProps<typeof Input>, 'id'> {
   label: string;
   id: string;
 }
 
-export const FloatingLabelInput = ({ label, id, value, onBlur, ...props }: FloatingLabelInputProps) => {
-  const [isFocused, setIsFocused] = useState(false);
+export const FloatingLabelInput = ({
+  label,
+  id,
+  value,
+  onBlur,
+  ...props
+}: FloatingLabelInputProps) => {
+  const [isFocused, setIsFocused] = React.useState(false);
   const hasValue = value ? String(value).length > 0 : false;
 
   const isFloating = isFocused || hasValue;
 
-  const handleFocus = () => setIsFocused(true);
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    setIsFocused(true);
+    props.onFocus?.(e);
+  };
+
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     setIsFocused(false);
-    if (onBlur) {
-      onBlur(e);
-    }
+    onBlur?.(e);
   };
 
   return (
