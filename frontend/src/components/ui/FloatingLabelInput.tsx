@@ -4,30 +4,22 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input, InputProps } from '@/components/ui/input';
 
-interface FloatingLabelInputProps extends InputProps {
+interface FloatingLabelInputProps extends Omit<InputProps, 'id'> {
   label: string;
   id: string;
 }
 
-export const FloatingLabelInput = ({ label, id, ...props }: FloatingLabelInputProps) => {
+export const FloatingLabelInput = ({ label, id, value, onBlur, ...props }: FloatingLabelInputProps) => {
   const [isFocused, setIsFocused] = useState(false);
-  const [hasValue, setHasValue] = useState(props.value ? String(props.value).length > 0 : false);
+  const hasValue = value ? String(value).length > 0 : false;
 
   const isFloating = isFocused || hasValue;
 
   const handleFocus = () => setIsFocused(true);
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     setIsFocused(false);
-    setHasValue(e.target.value.length > 0);
-    if (props.onBlur) {
-      props.onBlur(e);
-    }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setHasValue(e.target.value.length > 0);
-    if (props.onChange) {
-      props.onChange(e);
+    if (onBlur) {
+      onBlur(e);
     }
   };
 
@@ -36,7 +28,7 @@ export const FloatingLabelInput = ({ label, id, ...props }: FloatingLabelInputPr
       <motion.label
         htmlFor={id}
         className="absolute left-3 text-neutral-400 pointer-events-none"
-        initial={{ y: '50%', x: 0, scale: 1 }}
+        initial={false}
         animate={{
           y: isFloating ? '-90%' : '50%',
           x: isFloating ? -5 : 0,
@@ -49,9 +41,9 @@ export const FloatingLabelInput = ({ label, id, ...props }: FloatingLabelInputPr
       </motion.label>
       <Input
         id={id}
+        value={value}
         onFocus={handleFocus}
         onBlur={handleBlur}
-        onChange={handleChange}
         className="bg-white/5 border-white/20 backdrop-blur-sm h-12 pt-4 focus-visible:ring-offset-0 focus-visible:ring-2 focus-visible:ring-accent"
         {...props}
       />
