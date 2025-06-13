@@ -53,7 +53,7 @@ export const FloatingLabelInput = ({
         value={value}
         onFocus={handleFocus}
         onBlur={handleBlur}
-        className="bg-white/5 border-white/20 backdrop-blur-sm h-12 pt-4 focus-visible:ring-offset-0 focus-visible:ring-2 focus-visible:ring-accent"
+        className="h-12 pt-4 text-white bg-black/20 backdrop-blur-lg border border-white/20 rounded-lg transition-colors duration-300 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-0 disabled:opacity-50"
         {...props}
       />
     </div>
