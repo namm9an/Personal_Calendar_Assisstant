@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
 import { AuthProvider } from "../src/context/AuthContext";
@@ -7,6 +7,11 @@ import { AuthProvider } from "../src/context/AuthContext";
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-display",
 });
 
 export const metadata: Metadata = {
@@ -21,7 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} font-sans antialiased bg-gray-50`}>
+      <body className={`${inter.variable} ${spaceGrotesk.variable} font-sans antialiased bg-neutral-900 text-white`}>
         <AnimatedBackground />
         <div className="min-h-screen relative z-10">
           <AuthProvider>{children}</AuthProvider>

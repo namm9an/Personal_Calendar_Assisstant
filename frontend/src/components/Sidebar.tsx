@@ -27,7 +27,7 @@ export default function Sidebar() {
       variants={sidebarVariants}
       initial={false}
       animate={isCollapsed ? 'collapsed' : 'expanded'}
-      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
       className="h-screen p-4 bg-black/20 backdrop-blur-lg border-r border-white/10 flex flex-col justify-between relative"
     >
       <div>

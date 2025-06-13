@@ -82,10 +82,14 @@ export default function AuthForm({ mode }: AuthFormProps) {
       transition={{ duration: 0.5 }}
       className="w-full max-w-md mx-4"
     >
-      <Card className="bg-black/20 backdrop-blur-lg border border-white/20 text-white shadow-2xl shadow-black/50">
+      <Card className="glass-card shadow-2xl shadow-black/30 overflow-hidden relative">
+        {/* Add subtle animated gradient border */}
+        <div className="absolute inset-0 p-[1px] rounded-lg overflow-hidden pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-r from-accent/30 via-primary/30 to-secondary/30 animate-gradient-shift"></div>
+        </div>
         <form onSubmit={handleSubmit}>
-          <CardHeader className="text-center">
-            <CardTitle className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-br from-white to-neutral-300">
+          <CardHeader className="text-center relative z-10">
+            <CardTitle className="text-3xl font-bold text-gradient bg-gradient-to-br from-white to-neutral-300">
               {mode === "login" ? "Welcome Back" : "Create Account"}
             </CardTitle>
             <CardDescription className="text-neutral-400 pt-1">
@@ -132,34 +136,36 @@ export default function AuthForm({ mode }: AuthFormProps) {
           <CardFooter className="flex flex-col gap-4">
             <Button
               type="submit"
-              className="w-full h-12 text-lg font-bold text-white bg-gradient-to-r from-primary to-secondary transition-all duration-300 ease-out hover:scale-105 hover:shadow-lg hover:shadow-primary/50 disabled:opacity-50"
+              className="w-full h-12 text-lg font-bold text-white bg-gradient-to-r from-accent to-primary transition-all duration-300 ease-out hover:scale-105 hover:shadow-lg hover:shadow-accent/20 disabled:opacity-50 relative overflow-hidden group animate-shine"
               disabled={isLoading}
             >
-              {isLoading ? (
-                <Loader2 className="animate-spin" />
-              ) : mode === "login" ? (
-                "Sign In"
-              ) : (
-                "Create Account"
-              )}
+              <span className="relative z-10">
+                {isLoading ? (
+                  <Loader2 className="animate-spin" />
+                ) : mode === "login" ? (
+                  "Sign In"
+                ) : (
+                  "Create Account"
+                )}
+              </span>
             </Button>
             <div className="text-center text-sm text-neutral-400">
               {mode === "login" ? (
                 <p>
-                  Don't have an account?{" "}
+                  Don't have an account?{" "}
                   <Link
                     href="/signup"
-                    className="font-semibold text-accent-foreground hover:underline"
+                    className="font-semibold text-accent hover:underline"
                   >
                     Sign up
                   </Link>
                 </p>
               ) : (
                 <p>
-                  Already have an account?{" "}
+                  Already have an account?{" "}
                   <Link
                     href="/login"
-                    className="font-semibold text-accent-foreground hover:underline"
+                    className="font-semibold text-accent hover:underline"
                   >
                     Log in
                   </Link>
