@@ -1,245 +1,181 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Paperclip, Send, Bot, User, X } from 'lucide-react';
 
-interface ChatMessage {
-  role: "user" | "assistant" | "system";
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
   content: string;
 }
 
-interface AgentStep {
-  step_number: number;
-  message: string;
-  tool_invoked: string | null;
-  tool_input: any | null;
-  tool_output: any | null;
-  timestamp: string;
-}
-
-interface AgentResponse {
-  final_intent: string;
-  final_output: Record<string, any>;
-  summary: string;
-  steps: AgentStep[];
-  timestamp: string;
-}
-
-interface AgentError {
-  error: string;
-  details: Record<string, any> | null;
-  timestamp: string;
-}
-
 export default function AgentChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "system", content: "Hi! I'm your calendar assistant. How can I help you today?" },
-  ]);
-  const [input, setInput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [steps, setSteps] = useState<AgentStep[]>([]);
-  const [provider, setProvider] = useState<"google" | "microsoft">("google");
+  const [isOpen, setIsOpen] = useState(true); // Default to open for now
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
 
-  // Auto-scroll to bottom of chat
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(scrollToBottom, [messages]);
 
   const handleSend = async () => {
-    if (!input.trim() || isStreaming) return;
+    if (!input.trim()) return;
 
-    const userMessage = input.trim();
-    setInput("");
-    
-    // Add user message to chat
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
-    
-    // Show typing indicator
-    setIsStreaming(true);
-    setSteps([]);
+    const userMessage: Message = { id: Date.now().toString(), role: 'user', content: input };
+    setMessages((prev) => [...prev, userMessage]);
+    setInput('');
+    setIsLoading(true);
 
+    // SSE Streaming Logic
     try {
-      // Make API call to backend agent
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/agent/calendar`,
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/chat/stream`,
         {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ text: userMessage, provider }),
-          credentials: "include",
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: userMessage.content }),
+          credentials: 'include',
         }
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
       if (!response.body) {
-        throw new Error("ReadableStream not supported");
+        throw new Error('No response body');
       }
 
-      // Process the stream
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
-
-      let finalResponse: AgentResponse | null = null;
+      let assistantMessageContent = '';
+      let assistantMessageId = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        // Convert Uint8Array to string and append to buffer
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete SSE events in buffer
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() || ""; // Keep last incomplete chunk in buffer
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n\n');
 
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const jsonStr = line.slice(6); // Remove "data: " prefix
+          if (line.startsWith('data: ')) {
+            const jsonStr = line.substring(6);
+            if (jsonStr.trim() === '[DONE]') continue;
             try {
               const data = JSON.parse(jsonStr);
-              
-              // Check if it's a step or final response
-              if (data.step_number !== undefined) {
-                // It's an agent step
-                setSteps((prev) => [...prev, data]);
-                
-                // Update message for tool invocation
-                if (data.tool_invoked) {
-                  setMessages((prev) => [
-                    ...prev,
-                    {
-                      role: "assistant",
-                      content: `Using tool: ${data.tool_invoked}\n${data.message}`,
-                    },
-                  ]);
+              if (data.event === 'on_chat_model_stream') {
+                const chunkContent = data.data.chunk.content;
+                if(chunkContent) {
+                  assistantMessageContent += chunkContent;
+                  if (!assistantMessageId) {
+                    assistantMessageId = Date.now().toString() + '-ai';
+                    setMessages((prev) => [...prev, { id: assistantMessageId, role: 'assistant', content: assistantMessageContent }]);
+                  } else {
+                    setMessages((prev) =>
+                      prev.map((msg) =>
+                        msg.id === assistantMessageId ? { ...msg, content: assistantMessageContent } : msg
+                      )
+                    );
+                  }
                 }
-              } else if (data.final_intent !== undefined) {
-                // It's the final response
-                finalResponse = data;
-              } else if (data.error !== undefined) {
-                // It's an error
-                const error = data as AgentError;
-                setMessages((prev) => [
-                  ...prev,
-                  { role: "assistant", content: `Error: ${error.error}` },
-                ]);
               }
-            } catch (err) {
-              console.error("Failed to parse SSE data:", err);
+            } catch (e) {
+              // Ignore parsing errors for incomplete JSON
             }
           }
         }
       }
-
-      // Add final response message
-      if (finalResponse) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: finalResponse?.summary || "Task completed" },
-        ]);
-      }
-    } catch (err) {
-      console.error("Error in agent chat:", err);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "Sorry, I encountered an error. Please try again." },
-      ]);
+    } catch (error) {
+      console.error('SSE Error:', error);
+      const errorMessage: Message = { id: Date.now().toString(), role: 'assistant', content: 'Sorry, I encountered an error.' };
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
-      setIsStreaming(false);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 rounded-lg shadow">
-      <div className="flex justify-between items-center p-4 border-b">
-        <h2 className="font-semibold text-lg">Calendar Assistant</h2>
-        <div>
-          <select
-            value={provider}
-            onChange={(e) => setProvider(e.target.value as "google" | "microsoft")}
-            className="p-2 border rounded text-sm"
-            disabled={isStreaming}
-          >
-            <option value="google">Google Calendar</option>
-            <option value="microsoft">Microsoft Calendar</option>
-          </select>
-        </div>
-      </div>
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ y: '100%', opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: '100%', opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          className="fixed bottom-8 right-8 w-[400px] h-[600px] flex flex-col bg-black/30 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl z-50"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-white/10 flex-shrink-0">
+            <h3 className="text-lg font-bold text-white">AI Assistant</h3>
+            <button onClick={() => setIsOpen(false)} className="text-neutral-400 hover:text-white transition-colors">
+              <X size={20} />
+            </button>
+          </div>
 
-      {/* Chat messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message, index) => (
-          <div
-            key={index}
-            className={`flex ${
-              message.role === "user" ? "justify-end" : "justify-start"
-            }`}
-          >
-            <div
-              className={`max-w-[80%] px-4 py-2 rounded-lg ${
-                message.role === "user"
-                  ? "bg-blue-500 text-white rounded-br-none"
-                  : message.role === "system"
-                  ? "bg-gray-200 text-gray-800 rounded-bl-none"
-                  : "bg-white border text-gray-800 rounded-bl-none"
-              }`}
-            >
-              <pre className="whitespace-pre-wrap font-sans">{message.content}</pre>
+          {/* Messages */}
+          <div className="flex-1 p-4 overflow-y-auto space-y-4">
+            {messages.map((message) => (
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`flex items-start gap-3 ${
+                  message.role === 'user' ? 'justify-end' : 'justify-start'
+                }`}
+              >
+                {message.role === 'assistant' && <Bot className="w-6 h-6 text-primary flex-shrink-0 mt-1" />}
+                <div
+                  className={`max-w-[80%] p-3 rounded-2xl ${
+                    message.role === 'user'
+                      ? 'bg-gradient-to-br from-primary to-secondary text-white rounded-br-lg'
+                      : 'bg-white/10 text-neutral-200 rounded-bl-lg'
+                  }`}
+                >
+                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                </div>
+                {message.role === 'user' && <User className="w-6 h-6 text-neutral-300 flex-shrink-0 mt-1" />}
+              </motion.div>
+            ))}
+            {isLoading && (
+              <motion.div initial={{opacity: 0}} animate={{opacity: 1}} className="flex items-start gap-3 justify-start">
+                 <Bot className="w-6 h-6 text-primary flex-shrink-0 mt-1" />
+                 <div className="max-w-[80%] p-3 rounded-2xl bg-white/10 text-neutral-200 rounded-bl-lg flex items-center gap-2">
+                    <motion.div className="w-2 h-2 bg-neutral-400 rounded-full" animate={{y: [0, -4, 0]}} transition={{duration: 1, repeat: Infinity}}/>
+                    <motion.div className="w-2 h-2 bg-neutral-400 rounded-full" animate={{y: [0, -4, 0]}} transition={{duration: 1, repeat: Infinity, delay: 0.2}}/>
+                    <motion.div className="w-2 h-2 bg-neutral-400 rounded-full" animate={{y: [0, -4, 0]}} transition={{duration: 1, repeat: Infinity, delay: 0.4}}/>
+                 </div>
+              </motion.div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <div className="p-4 border-t border-white/10 flex-shrink-0">
+            <div className="relative">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                placeholder="Ask your assistant..."
+                className="w-full h-12 bg-white/5 border border-white/20 rounded-full pl-12 pr-12 text-white placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-accent"
+                disabled={isLoading}
+              />
+              <button className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white">
+                <Paperclip size={20} />
+              </button>
+              <button
+                onClick={handleSend}
+                disabled={isLoading || !input.trim()}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white disabled:opacity-50 transition-colors"
+              >
+                <Send size={20} />
+              </button>
             </div>
           </div>
-        ))}
-
-        {/* Typing indicator */}
-        {isStreaming && (
-          <div className="flex justify-start">
-            <div className="bg-white border px-4 py-2 rounded-lg rounded-bl-none">
-              <div className="flex space-x-2 items-center">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0.4s" }}></div>
-              </div>
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input area */}
-      <div className="border-t p-4">
-        <div className="flex">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type your message..."
-            className="flex-1 p-2 border rounded-l-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-            rows={2}
-            disabled={isStreaming}
-          ></textarea>
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || isStreaming}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-r-lg disabled:bg-blue-300 disabled:cursor-not-allowed"
-          >
-            Send
-          </button>
-        </div>
-      </div>
-    </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
-} 
+}
