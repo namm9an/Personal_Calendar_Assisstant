@@ -1,9 +1,6 @@
-"use client";
-
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, subMonths, isSameMonth, isSameDay } from 'date-fns';
+import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, subMonths, isSameMonth, isSameDay, parseISO } from 'date-fns';
 
 interface CalendarEvent {
   id: string;
@@ -18,30 +15,26 @@ const CalendarView = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchEvents = async () => {
-      setIsLoading(true);
-      try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/events/`,
-          {
-            credentials: 'include',
-          }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setEvents(data.events || []);
-        } else {
-          console.error('Failed to fetch events');
-          setEvents([]);
-        }
-      } catch (error) {
-        console.error('Error fetching events:', error);
-        setEvents([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchEvents();
   }, [currentDate]);
+
+  const fetchEvents = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/events`, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch events");
+      }
+      const data = await response.json();
+      setEvents(data.events || []);
+    } catch (error) {
+      console.error("Error fetching events:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(monthStart);
@@ -53,62 +46,73 @@ const CalendarView = () => {
   const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
 
   const getEventsForDay = (day: Date) => {
-    return events.filter(event => isSameDay(new Date(event.start.dateTime), day));
+    return events.filter(event => {
+      const eventDate = parseISO(event.start.dateTime);
+      return isSameDay(eventDate, day);
+    });
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="bg-black/20 backdrop-blur-lg border border-white/10 rounded-2xl p-6 shadow-lg h-full flex flex-col"
-    >
+    <div className="bg-white rounded-3xl shadow-lg border border-gray-100 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-white">{format(currentDate, 'MMMM yyyy')}</h2>
-        <div className="flex items-center gap-2">
-          <button onClick={prevMonth} className="p-2 rounded-full hover:bg-white/10 transition-colors text-neutral-300">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">{format(currentDate, 'MMMM yyyy')}</h2>
+          <p className="text-gray-600">Manage your schedule</p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors">
+            Today
+          </button>
+          <button onClick={prevMonth} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
             <ChevronLeft size={20} />
           </button>
-          <button onClick={nextMonth} className="p-2 rounded-full hover:bg-white/10 transition-colors text-neutral-300">
+          <button onClick={nextMonth} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
             <ChevronRight size={20} />
           </button>
         </div>
       </div>
-
-      {/* Days of the week */}
-      <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold text-neutral-400 mb-2">
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => <div key={day}>{day}</div>)}
-      </div>
-
+      
       {/* Calendar Grid */}
-      <div className="grid grid-cols-7 grid-rows-5 gap-2 flex-1">
-        {days.map(day => (
-          <div
-            key={day.toString()}
-            className={`border border-white/10 rounded-lg p-2 flex flex-col transition-colors ${
-              isSameMonth(day, currentDate) ? 'bg-white/5' : 'bg-transparent text-neutral-500'
-            } ${isSameDay(day, new Date()) ? 'border-primary' : ''}`}
+      <div className="grid grid-cols-7 gap-1 mb-4">
+        {/* Day Headers */}
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+          <div key={day} className="p-3 text-center text-sm font-medium text-gray-500">
+            {day}
+          </div>
+        ))}
+        
+        {/* Calendar Days */}
+        {days.map((day) => (
+          <div 
+            key={day.toString()} 
+            className={`p-3 text-center text-sm cursor-pointer rounded-xl transition-all duration-200 ${isSameMonth(day, currentDate) ? 'text-gray-700 hover:bg-gray-100' : 'text-gray-400'} ${isSameDay(day, new Date()) ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg' : ''}`}
           >
-            <span className={`font-semibold text-sm ${isSameDay(day, new Date()) ? 'text-primary' : ''}`}>
-              {format(day, 'd')}
-            </span>
-            <div className="mt-1 space-y-1 overflow-y-auto">
-              {getEventsForDay(day).map(event => (
-                <motion.div
-                  key={event.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="bg-accent/50 text-white text-xs p-1 rounded-md truncate cursor-pointer hover:bg-accent"
-                >
-                  {event.summary}
-                </motion.div>
-              ))}
-            </div>
+            {format(day, 'd')}
+            {getEventsForDay(day).map((event) => (
+              <div key={event.id} className="mt-1 text-xs text-gray-600">{event.summary}</div>
+            ))}
           </div>
         ))}
       </div>
-    </motion.div>
+      
+      {/* Upcoming Events */}
+      <div className="border-t border-gray-100 pt-6">
+        <h3 className="font-semibold text-gray-900 mb-4">Upcoming Events</h3>
+        <div className="space-y-3">
+          {events.map((event) => (
+            <div key={event.id} className="flex items-center p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer">
+              <div className={`w-3 h-3 rounded-full mr-3 bg-blue-500`}></div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-gray-900 truncate">{event.summary}</p>
+                <p className="text-sm text-gray-500">{format(new Date(event.start.dateTime), 'hh:mm a')} - {format(new Date(event.end.dateTime), 'hh:mm a')}</p>
+              </div>
+              <ChevronRight size={20} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 };
 

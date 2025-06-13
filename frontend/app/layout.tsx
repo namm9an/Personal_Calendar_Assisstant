@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
 import { AuthProvider } from "../src/context/AuthContext";
 
 const inter = Inter({
@@ -20,8 +21,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} font-sans antialiased`}>
-        <AuthProvider>{children}</AuthProvider>
+      <body className={`${inter.variable} font-sans antialiased bg-gray-50`}>
+        <AnimatedBackground />
+        <div className="min-h-screen relative z-10">
+          <AuthProvider>{children}</AuthProvider>
+        </div>
       </body>
     </html>
   );
