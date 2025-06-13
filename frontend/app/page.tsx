@@ -18,7 +18,7 @@ export default function Home() {
   }
 
   if (!user) {
-    return <AuthForm />;
+    return <AuthForm mode="login" />;
   }
 
   return (
