@@ -14,7 +14,7 @@ from app.api.router import router as api_router
 from app.auth.router import router as auth_router
 from src.api.agent_calendar import router as agent_router
 from app.config import get_settings
-from app.db.mongodb import mongodb
+from app.db.dev_db import mongodb
 from app.db.init_db import init_db
 
 # Setup logging
@@ -139,7 +139,7 @@ def create_application() -> FastAPI:
         }
     
     # Include API routers
-    app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
+    app.include_router(auth_router, prefix=f"{settings.API_PREFIX}/auth", tags=["Authentication"])
     app.include_router(api_router, prefix=settings.API_PREFIX, tags=["API"])
     
     # The agent_router already has the prefix "/agent" defined in it, so we don't add it here

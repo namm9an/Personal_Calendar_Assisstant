@@ -5,11 +5,11 @@ from contextlib import asynccontextmanager
 import logging
 import time
 from typing import Callable
-from src.db.connection import mongodb
-from src.db.init_db import init_db
-from src.repositories.mongodb_repository import MongoDBRepository
-from src.core.config import settings
-from src.core.exceptions import (
+from db.connection import mongodb
+from db.init_db import init_db
+from repositories.mongodb_repository import MongoDBRepository
+from core.config import settings
+from core.exceptions import (
     DatabaseError,
     ValidationError,
     AuthenticationError,
@@ -162,9 +162,8 @@ async def startup_event():
     logger.info("Application starting up")
 
 # Import and include routers
-from src.api.auth import router as auth_router
-from src.api.calendar import router as calendar_router
-from src.api.agent import router as agent_router
+from api.auth import router as auth_router
+from api.agent_calendar import router as calendar_router
 
 # Include routers with proper prefix and tags
 app.include_router(
@@ -178,13 +177,6 @@ app.include_router(
     calendar_router,
     prefix="/api/v1/calendar",
     tags=["Calendar"],
-    responses={401: {"description": "Unauthorized"}}
-)
-
-app.include_router(
-    agent_router,
-    prefix="/api/v1/agent",
-    tags=["AI Agent"],
     responses={401: {"description": "Unauthorized"}}
 )
 

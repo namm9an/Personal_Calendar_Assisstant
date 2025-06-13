@@ -448,3 +448,9 @@ def microsoft_service():
 def token_encryption():
     """Create a TokenEncryption instance for testing."""
     return TokenEncryption.get_instance("test_key_12345678901234567890123456789012") 
+
+@pytest.fixture
+def TestingSessionLocal():
+    """Mock database session for testing purposes."""
+    session = MagicMock()
+    return session

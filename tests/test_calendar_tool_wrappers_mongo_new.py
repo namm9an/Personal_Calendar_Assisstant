@@ -8,7 +8,6 @@ import pytest
 import pytest_asyncio
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import ValidationError
 from src.core.exceptions import ToolExecutionError

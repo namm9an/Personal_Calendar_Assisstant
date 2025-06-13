@@ -61,9 +61,6 @@ email-validator==2.1.0.post1
 # Redis
 hiredis==2.3.2
 
-# LLM and AI
-llama-cpp-python==0.2.11
-
 # Calendar APIs
 google-auth==2.23.4
 

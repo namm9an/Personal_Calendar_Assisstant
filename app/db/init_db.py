@@ -2,13 +2,23 @@
 Database initialization module.
 """
 import logging
-from app.db.mongodb import mongodb
+try:
+    from app.db.dev_db import mongodb
+except ImportError:
+    from app.db.mongodb import mongodb
 
 logger = logging.getLogger(__name__)
 
 async def init_db():
     """Initialize database with indexes and initial setup."""
     try:
+        # Check if we're using the development database
+        if hasattr(mongodb, 'db_path'):
+            # For development database, we don't need to create indexes
+            logger.info("Using development database, skipping index creation")
+            return
+            
+        # For MongoDB, create indexes
         # Create indexes for users collection
         await mongodb.db.users.create_index("email", unique=True)
         await mongodb.db.users.create_index("created_at")
