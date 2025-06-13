@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, ChangeEvent } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -105,7 +105,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
                 id="name"
                 label="Name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
                 required
                 disabled={isLoading}
               />
@@ -115,7 +115,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               label="Email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
               required
               disabled={isLoading}
             />
@@ -124,7 +124,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
               label="Password"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
               required
               disabled={isLoading}
             />
