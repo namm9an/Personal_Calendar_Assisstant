@@ -1,5 +1,7 @@
+'use client';
+
 import React from 'react';
-import MagneticButton from '../ui/MagneticButton';
+import { MagneticButton } from '../ui/MagneticButton';
 
 const QuickActions = () => {
   return (

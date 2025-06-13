@@ -1,5 +1,6 @@
+'use client';
+
 import React from 'react';
-import { motion } from 'framer-motion';
 
 const ActivityFeed = () => {
   const activities = [
@@ -9,31 +10,23 @@ const ActivityFeed = () => {
   ];
 
   return (
-    <motion.div 
-      className="activity-feed"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.4 }}
-    >
+    <div className="activity-feed">
       <h3 className="text-lg font-semibold mb-2">Activity Feed</h3>
       <div className="space-y-3">
-        {activities.map((activity, index) => (
-          <motion.div
+        {activities.map((activity) => (
+          <div
             key={activity.id}
             className="bg-white/5 rounded-xl p-3"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 + index * 0.1 }}
           >
             <div className="flex justify-between">
               <span className="font-medium">{activity.action}</span>
               <span className="text-sm text-gray-400">{activity.time}</span>
             </div>
             <p className="text-sm mt-1">{activity.details}</p>
-          </motion.div>
+          </div>
         ))}
       </div>
-    </motion.div>
+    </div>
   );
 };
 
