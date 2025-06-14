@@ -15,6 +15,15 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
   },
+  transpilePackages: ['framer-motion'],
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /\.mjs$/,
+      include: /node_modules/,
+      type: 'javascript/auto',
+    });
+    return config;
+  },
 }
 
 module.exports = nextConfig;
