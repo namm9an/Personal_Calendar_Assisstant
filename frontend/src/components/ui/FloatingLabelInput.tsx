@@ -6,6 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
+const MotionLabel = motion.label;
+
 interface FloatingLabelInputProps
   extends Omit<React.ComponentProps<typeof Input>, 'id'> {
   label: string;
@@ -49,23 +51,23 @@ export const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
       y: "50%",
       scale: 1,
       opacity: 0.7,
-      color: "#94a3b8", // neutral-400
+      color: "#a3b3c6", // lighter color for better visibility
     },
     focused: {
       y: "-60%",
       scale: 0.85,
       opacity: 1,
-      color: "#06b6d4", // accent color (cyan)
+      color: "rgb(var(--primary))", // primary color
     },
   };
 
   return (
     <div className={cn("relative w-full", className)}>
-      <motion.label
+      <MotionLabel
         htmlFor={id}
         className={cn(
-          "absolute left-3 transform -translate-y-1/2 pointer-events-none text-neutral-400",
-          "transition-all duration-200 ease-in-out origin-[0]",
+          "absolute left-3 transform -translate-y-1/2 pointer-events-none text-white/80",
+          "transition-all duration-200 ease-in-out origin-[0] z-10",
           labelClassName
         )}
         variants={labelVariants}
@@ -74,7 +76,7 @@ export const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
         transition={{ duration: 0.2 }}
       >
         {label}
-      </motion.label>
+      </MotionLabel>
       <Input
         id={id}
         type={type}
@@ -83,9 +85,9 @@ export const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
         onFocus={handleFocus}
         onBlur={handleBlur}
         className={cn(
-          "h-14 pt-4 glass-input", // Using our new glass-input utility class
-          "focus:ring-2 focus:ring-accent focus:border-accent", // Accent color focus
-          "placeholder:text-neutral-500", // Placeholder color
+          "h-14 pt-4 glass-input", // Using our updated glass-input utility class
+          "focus:ring-2 focus:ring-primary focus:border-primary", // Primary color focus
+          "placeholder:text-neutral-400", // Placeholder color
           inputClassName
         )}
         {...props}

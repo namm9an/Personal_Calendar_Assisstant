@@ -3,6 +3,8 @@
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 
+const MotionDiv = motion.div;
+
 export const AnimatedBackground = () => {
   const [mounted, setMounted] = useState(false);
   
@@ -13,7 +15,7 @@ export const AnimatedBackground = () => {
   if (!mounted) return null;
   
   return (
-    <div className="fixed inset-0 overflow-hidden pointer-events-none bg-neutral-900">
+    <div className="fixed inset-0 overflow-hidden pointer-events-none bg-black">
       {/* Subtle grid pattern */}
       <div className="absolute inset-0 opacity-10">
         <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
@@ -25,12 +27,15 @@ export const AnimatedBackground = () => {
           <rect width="100%" height="100%" fill="url(#grid)" />
         </svg>
       </div>
+
+      {/* Digital circuit lines */}
+      <div className="absolute inset-0 circuit-pattern opacity-10"></div>
       
       {/* Larger, slower moving background elements */}
       {[...Array(5)].map((_, i) => (
-        <motion.div
+        <MotionDiv
           key={`large-${i}`}
-          className="absolute rounded-full bg-gradient-to-br from-indigo-500/10 to-purple-500/10 blur-3xl"
+          className="absolute rounded-full bg-gradient-to-br from-primary/20 to-accent/20 blur-3xl"
           style={{
             width: `${Math.random() * 300 + 200}px`,
             height: `${Math.random() * 300 + 200}px`,
@@ -52,9 +57,9 @@ export const AnimatedBackground = () => {
       
       {/* Medium sized elements with moderate movement */}
       {[...Array(8)].map((_, i) => (
-        <motion.div
+        <MotionDiv
           key={`medium-${i}`}
-          className="absolute rounded-full bg-gradient-to-br from-pink-500/15 to-cyan-500/15 blur-xl"
+          className="absolute rounded-full bg-gradient-to-br from-secondary/20 to-primary/20 blur-xl"
           style={{
             width: `${Math.random() * 150 + 100}px`,
             height: `${Math.random() * 150 + 100}px`,
@@ -77,9 +82,9 @@ export const AnimatedBackground = () => {
       
       {/* Smaller, faster moving elements */}
       {[...Array(10)].map((_, i) => (
-        <motion.div
+        <MotionDiv
           key={`small-${i}`}
-          className="absolute rounded-full bg-gradient-to-br from-cyan-500/20 to-indigo-500/20 blur-lg"
+          className="absolute rounded-full bg-gradient-to-br from-accent/25 to-secondary/25 blur-lg"
           style={{
             width: `${Math.random() * 60 + 40}px`,
             height: `${Math.random() * 60 + 40}px`,
@@ -101,8 +106,8 @@ export const AnimatedBackground = () => {
       ))}
       
       {/* Scattered small dots */}
-      {[...Array(30)].map((_, i) => (
-        <motion.div
+      {[...Array(40)].map((_, i) => (
+        <MotionDiv
           key={`dot-${i}`}
           className="absolute rounded-full bg-white"
           style={{
@@ -110,21 +115,27 @@ export const AnimatedBackground = () => {
             height: `${Math.random() * 3 + 1}px`,
             top: `${Math.random() * 100}%`,
             left: `${Math.random() * 100}%`,
-            opacity: Math.random() * 0.5 + 0.2,
+            opacity: Math.random() * 0.5 + 0.3,
           }}
           animate={{
-            opacity: [0.2, 0.5, 0.2],
+            opacity: [0.3, 0.7, 0.3],
+            scale: [1, 1.5, 1],
           }}
           transition={{
             duration: 3 + Math.random() * 2,
             repeat: Infinity,
-            ease: "easeInOut"
+            ease: "easeInOut",
+            delay: Math.random() * 2,
           }}
         />
       ))}
       
+      {/* Cyber elements */}
+      <div className="absolute top-20 right-20 w-40 h-40 border border-accent/30 rounded-lg rotate-12 opacity-30" />
+      <div className="absolute bottom-40 left-20 w-60 h-20 border border-primary/30 rounded-lg -rotate-6 opacity-30" />
+      
       {/* Asymmetrical geometric shapes */}
-      <motion.div
+      <MotionDiv
         className="absolute w-64 h-64 border border-white/10 rounded-lg"
         style={{
           top: '15%',
@@ -132,7 +143,7 @@ export const AnimatedBackground = () => {
           transform: 'rotate(15deg)',
         }}
         animate={{
-          rotate: [15, 20, 15],
+          rotate: [15, 25, 15],
           scale: [1, 1.05, 1],
         }}
         transition={{
@@ -142,14 +153,15 @@ export const AnimatedBackground = () => {
         }}
       />
       
-      <motion.div
+      <MotionDiv
         className="absolute w-40 h-40 border border-white/10 rounded-full"
         style={{
           bottom: '20%',
           right: '15%',
         }}
         animate={{
-          scale: [1, 1.1, 1],
+          scale: [1, 1.2, 1],
+          rotate: [0, -15, 0],
         }}
         transition={{
           duration: 15,
@@ -157,6 +169,21 @@ export const AnimatedBackground = () => {
           ease: "easeInOut"
         }}
       />
+
+      {/* Futuristic scan line */}
+      <MotionDiv 
+        className="absolute inset-0 scan-line opacity-10"
+        animate={{
+          top: ["-100%", "200%"],
+        }}
+        transition={{
+          duration: 8,
+          repeat: Infinity,
+          ease: "linear",
+        }}
+      />
     </div>
   );
 };
+
+export default AnimatedBackground;

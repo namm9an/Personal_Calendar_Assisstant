@@ -6,6 +6,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutGrid, Calendar, MessageSquare, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
+const MotionAside = motion.aside;
+const MotionDiv = motion.div;
+const MotionSpan = motion.span;
+
 const navItems = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutGrid },
   { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
@@ -23,7 +27,7 @@ export default function Sidebar() {
   };
 
   return (
-    <motion.aside
+    <MotionAside
       variants={sidebarVariants}
       initial={false}
       animate={isCollapsed ? 'collapsed' : 'expanded'}
@@ -34,11 +38,11 @@ export default function Sidebar() {
         <div className="flex items-center justify-center mb-10 h-8">
           <AnimatePresence>
           {!isCollapsed && (
-            <motion.div initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} transition={{duration: 0.2}}>
+            <MotionDiv initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}} transition={{duration: 0.2}}>
               <Link href="/" className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
                 CalendarAI
               </Link>
-            </motion.div>
+            </MotionDiv>
           )}
           </AnimatePresence>
         </div>
@@ -55,7 +59,7 @@ export default function Sidebar() {
                 <item.icon className="h-6 w-6 flex-shrink-0" />
                 <AnimatePresence>
                   {!isCollapsed && (
-                    <motion.span
+                    <MotionSpan
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -10 }}
@@ -63,7 +67,7 @@ export default function Sidebar() {
                       className="font-semibold whitespace-nowrap"
                     >
                       {item.name}
-                    </motion.span>
+                    </MotionSpan>
                   )}
                 </AnimatePresence>
               </div>
@@ -77,6 +81,6 @@ export default function Sidebar() {
       >
         {isCollapsed ? <ChevronRight className="h-5 w-5 text-white" /> : <ChevronLeft className="h-5 w-5 text-white" />}
       </button>
-    </motion.aside>
+    </MotionAside>
   );
 }

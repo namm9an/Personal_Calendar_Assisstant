@@ -1,99 +1,67 @@
-"use client";
-
-import AuthForm from "@/components/AuthForm";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { AuthForm } from "@/components/AuthForm";
+
+const MotionDiv = motion.div;
+const MotionH1 = motion.h1;
+const MotionP = motion.p;
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex">
-      {/* Left Side - Animated Background */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
-        <div className="absolute inset-0 bg-neutral-900">
-          {/* Scattered object composition */}
-          <div className="absolute inset-0 opacity-30">
-            {[...Array(20)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute rounded-full bg-gradient-to-r from-accent to-primary blur-xl"
-                style={{
-                  width: `${Math.random() * 300 + 50}px`,
-                  height: `${Math.random() * 300 + 50}px`,
-                  top: `${Math.random() * 100}%`,
-                  left: `${Math.random() * 100}%`,
-                  opacity: Math.random() * 0.5 + 0.1,
-                }}
-                animate={{
-                  x: [0, (Math.random() - 0.5) * 40],
-                  y: [0, (Math.random() - 0.5) * 40],
-                  rotate: [0, Math.random() * 360],
-                }}
-                transition={{
-                  duration: 20 + Math.random() * 10,
-                  repeat: Infinity,
-                  repeatType: "reverse",
-                  ease: "easeInOut"
-                }}
+    <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-24 relative overflow-hidden">
+      <div className="w-full max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+        {/* Left column - Hidden on mobile, visible on larger screens */}
+        <MotionDiv 
+          className="hidden lg:flex flex-col items-center justify-center relative"
+          initial={{ opacity: 0, x: -50 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+        >
+          <div className="relative">
+            {/* Background elements */}
+            <div className="absolute -z-10 inset-0 blur-3xl bg-gradient-to-br from-primary/20 via-accent/20 to-secondary/20 rounded-full transform -translate-x-1/4 -translate-y-1/4 w-[150%] h-[150%]"></div>
+            
+            {/* Content */}
+            <div className="text-center space-y-6 p-8">
+              <MotionH1 
+                className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3, duration: 0.8 }}
+              >
+                Welcome Back
+              </MotionH1>
+              
+              <MotionP 
+                className="text-xl text-white/80 max-w-md conversational-text"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5, duration: 0.8 }}
+              >
+                Your personal calendar assistant is ready to help you organize your schedule and boost your productivity.
+              </MotionP>
+              
+              {/* Decorative elements */}
+              <MotionDiv 
+                className="w-16 h-16 border border-accent/30 rounded-lg absolute -bottom-8 -left-8 -z-10"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
               />
-            ))}
+              
+              <MotionDiv 
+                className="w-24 h-24 border border-primary/30 rounded-full absolute -top-12 -right-12 -z-10"
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+              />
+            </div>
           </div>
-        </div>
+        </MotionDiv>
         
-        {/* Content Overlay */}
-        <div className="relative z-10 flex flex-col justify-center p-12 text-white">
-          <motion.h2 
-            className="text-5xl font-bold mb-4"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.8 }}
-          >
-            Welcome Back
-          </motion.h2>
-          <motion.p 
-            className="text-xl opacity-90"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.8 }}
-          >
-            Continue your journey with AI-powered scheduling
-          </motion.p>
-        </div>
-      </div>
-      
-      {/* Right Side - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-neutral-900 relative">
-        {/* Subtle background elements */}
-        <div className="absolute inset-0 overflow-hidden opacity-20">
-          {[...Array(5)].map((_, i) => (
-            <div 
-              key={i}
-              className="absolute bg-white/5 backdrop-blur-3xl rounded-full"
-              style={{
-                width: `${Math.random() * 500 + 200}px`,
-                height: `${Math.random() * 500 + 200}px`,
-                top: `${Math.random() * 100}%`,
-                left: `${Math.random() * 100}%`,
-              }}
-            />
-          ))}
-        </div>
-        
-        <div className="w-full max-w-md relative z-10">
-          <motion.div 
-            className="text-center mb-8"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-          >
-            <h1 className="text-4xl font-bold mb-2 text-white">
-              Your AI Calendar
-              <br />
-              <span className="text-gradient-brand text-6xl md:text-7xl lg:text-8xl">Reimagined</span>
-            </h1>
-          </motion.div>
+        {/* Right column - Auth form */}
+        <div className="w-full">
           <AuthForm mode="login" />
         </div>
       </div>
-    </div>
+    </main>
   );
 }

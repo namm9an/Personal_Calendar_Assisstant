@@ -1,128 +1,115 @@
-"use client";
-
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import dynamic from 'next/dynamic';
-import { motion } from 'framer-motion';
+import { motion } from "framer-motion";
 
-const features = [
-  {
-    title: "AI-Powered Scheduling",
-    description: "Our assistant learns your preferences to find the perfect meeting times.",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
-    ),
-  },
-  {
-    title: "Natural Language Processing",
-    description: "Just type or speak naturally to schedule, reschedule, or cancel meetings.",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-      </svg>
-    ),
-  },
-  {
-    title: "Cross-Platform Sync",
-    description: "Seamlessly sync with Google Calendar, Outlook, and Apple Calendar.",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-      </svg>
-    ),
-  },
-];
-
-const Dashboard = dynamic(() => import('@/components/dashboard/Dashboard'), {
-  loading: () => <div>Loading...</div>,
-  ssr: false
-});
+const MotionH1 = motion.h1;
+const MotionP = motion.p;
+const MotionDiv = motion.div;
 
 export default function Home() {
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-      {/* Content */}
-      <div className="relative z-10 text-center max-w-5xl mx-auto px-4">
-        <motion.h1 
-          className="text-6xl md:text-7xl lg:text-8xl font-bold mb-6"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-        >
-          Your AI Calendar
-          <br />
-          <span className="text-gradient-brand text-6xl md:text-7xl lg:text-8xl">Reimagined</span>
-        </motion.h1>
-        
-        <motion.p 
-          className="text-xl lg:text-2xl text-neutral-300 mb-8 max-w-3xl mx-auto"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.8 }}
-        >
-          Experience the future of scheduling with our intelligent assistant that learns your preferences and manages your time effortlessly.
-        </motion.p>
-        
-        {/* Feature Cards */}
-        <motion.div 
-          className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.8 }}
-        >
-          {features.map((feature, index) => (
-            <motion.div 
-              key={index}
-              className="glass-card p-6 flex flex-col items-center text-center"
-              whileHover={{ y: -5, boxShadow: "0 10px 30px -10px rgba(6, 182, 212, 0.2)" }}
-              transition={{ duration: 0.2 }}
+    <main className="flex min-h-screen flex-col items-center justify-center p-4 md:p-24 relative overflow-hidden">
+      {/* Hero Section */}
+      <div className="w-full max-w-6xl mx-auto relative z-10">
+        <div className="text-center space-y-8 mb-16">
+          {/* Main Heading with Gradient */}
+          <MotionH1 
+            className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+          >
+            <span className="block">Your AI Calendar</span>
+            <span className="bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent animate-gradient-shift spaced-text">
+              Reimagined
+            </span>
+          </MotionH1>
+          
+          {/* Subheading */}
+          <MotionP 
+            className="text-xl md:text-2xl text-white/80 max-w-2xl mx-auto conversational-text"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3, duration: 0.8 }}
+          >
+            Organize your schedule effortlessly with our AI-powered calendar assistant that adapts to your needs.
+          </MotionP>
+          
+          {/* CTA Buttons */}
+          <MotionDiv 
+            className="flex flex-col sm:flex-row gap-4 justify-center mt-8"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, duration: 0.8 }}
+          >
+            <Link 
+              href="/signup" 
+              className="px-8 py-4 rounded-md bg-gradient-to-r from-primary to-accent text-white font-bold text-lg shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 hover:scale-105 transition-all duration-300 relative overflow-hidden group"
             >
-              <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mb-4 text-accent">
-                {feature.icon}
-              </div>
-              <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
-              <p className="text-neutral-400">{feature.description}</p>
-            </motion.div>
-          ))}
-        </motion.div>
+              <span className="relative z-10">Get Started</span>
+              <span className="absolute inset-0 w-full h-full bg-white/20 animate-shine"></span>
+            </Link>
+            
+            <Link 
+              href="/login" 
+              className="px-8 py-4 rounded-md border border-white/20 bg-black/50 backdrop-blur-md text-white font-bold text-lg hover:bg-white/10 transition-all duration-300"
+            >
+              Log In
+            </Link>
+          </MotionDiv>
+        </div>
         
-        {/* CTA Buttons */}
-        <motion.div 
-          className="flex flex-col sm:flex-row gap-4 justify-center"
-          initial={{ opacity: 0, y: 20 }}
+        {/* Features Section */}
+        <MotionDiv 
+          className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-16"
+          initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6, duration: 0.8 }}
+          transition={{ delay: 0.7, duration: 0.8 }}
         >
-          <Link href="/signup">
-            <Button className="group relative px-8 py-6 bg-gradient-to-r from-accent to-primary text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 animate-shine">
-              <span className="relative z-10 text-lg">Start Free Trial</span>
-            </Button>
-          </Link>
-          <Link href="/login">
-            <Button variant="outline" className="group relative px-8 py-6 border border-white/20 bg-white/5 backdrop-blur-sm text-white font-semibold rounded-xl hover:bg-white/10 transform hover:scale-105 transition-all duration-300">
-              <span className="relative z-10 text-lg">Log In</span>
-            </Button>
-          </Link>
-        </motion.div>
+          {/* Feature 1 */}
+          <div className="glass-card p-6 rounded-xl border border-white/20 relative overflow-hidden group">
+            <div className="absolute -top-24 -right-24 w-40 h-40 bg-primary/20 rounded-full blur-3xl group-hover:bg-primary/30 transition-all duration-700"></div>
+            <h3 className="text-xl font-bold mb-3 text-white relative z-10">Smart Scheduling</h3>
+            <p className="text-white/70 relative z-10">AI-powered scheduling that learns your preferences and optimizes your calendar.</p>
+          </div>
+          
+          {/* Feature 2 */}
+          <div className="glass-card p-6 rounded-xl border border-white/20 relative overflow-hidden group">
+            <div className="absolute -top-24 -right-24 w-40 h-40 bg-accent/20 rounded-full blur-3xl group-hover:bg-accent/30 transition-all duration-700"></div>
+            <h3 className="text-xl font-bold mb-3 text-white relative z-10">Voice Commands</h3>
+            <p className="text-white/70 relative z-10">Create and manage events using natural language voice commands.</p>
+          </div>
+          
+          {/* Feature 3 */}
+          <div className="glass-card p-6 rounded-xl border border-white/20 relative overflow-hidden group">
+            <div className="absolute -top-24 -right-24 w-40 h-40 bg-secondary/20 rounded-full blur-3xl group-hover:bg-secondary/30 transition-all duration-700"></div>
+            <h3 className="text-xl font-bold mb-3 text-white relative z-10">Smart Reminders</h3>
+            <p className="text-white/70 relative z-10">Contextual reminders that know when and how to notify you.</p>
+          </div>
+        </MotionDiv>
       </div>
       
       {/* Scroll Indicator */}
-      <motion.div 
-        className="absolute bottom-10 left-1/2 transform -translate-x-1/2"
+      <MotionDiv 
+        className="absolute bottom-8 left-1/2 transform -translate-x-1/2"
         initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1, duration: 0.8 }}
+        animate={{ opacity: 1, y: [0, 10, 0] }}
+        transition={{ 
+          opacity: { delay: 1.5, duration: 1 },
+          y: { delay: 1.5, duration: 1.5, repeat: Infinity, ease: "easeInOut" }
+        }}
       >
-        <motion.div 
-          className="w-6 h-10 border-2 border-white/30 rounded-full flex justify-center"
-          animate={{ y: [0, 10, 0] }}
-          transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <div className="w-1 h-3 bg-white/50 rounded-full mt-2"></div>
-        </motion.div>
-      </motion.div>
-    </section>
+        <div className="w-6 h-10 rounded-full border-2 border-white/30 flex justify-center pt-2">
+          <MotionDiv 
+            className="w-1 h-2 bg-white/60 rounded-full"
+            animate={{ y: [0, 4, 0] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+          />
+        </div>
+      </MotionDiv>
+      
+      {/* Decorative border elements */}
+      <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
+      <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
+    </main>
   );
 }
